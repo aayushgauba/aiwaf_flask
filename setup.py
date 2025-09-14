@@ -56,6 +56,12 @@ setup(
         "flask", "security", "firewall", "web", "protection", "middleware", 
         "rate-limiting", "ip-blocking", "ddos", "waf"
     ],
+    entry_points={
+        'console_scripts': [
+            'aiwaf-console=aiwaf_flask.cli:main',
+            'aiwaf=aiwaf_flask.cli:main',
+        ],
+    },
     include_package_data=True,
     zip_safe=False,
 )
