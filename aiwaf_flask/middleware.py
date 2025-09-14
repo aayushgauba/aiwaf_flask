@@ -37,9 +37,13 @@ def register_aiwaf_middlewares(app, use_database=None):
 
 def _should_use_database(app):
     """Check if the app has database configuration."""
+    # If CSV is explicitly enabled, don't use database
+    if app.config.get('AIWAF_USE_CSV', True):
+        return False
+    
+    # Only use database if SQLAlchemy URI is configured and CSV is disabled
     return (hasattr(app.config, 'get') and 
-            app.config.get('SQLALCHEMY_DATABASE_URI') is not None and
-            not app.config.get('AIWAF_USE_CSV', False))
+            app.config.get('SQLALCHEMY_DATABASE_URI') is not None)
 
 def _init_database(app):
     """Initialize database if not already done."""

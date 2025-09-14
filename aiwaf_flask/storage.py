@@ -6,6 +6,8 @@ import threading
 import time
 import logging
 import random
+import tempfile
+import shutil
 from datetime import datetime
 from pathlib import Path
 from contextlib import contextmanager
@@ -36,6 +38,11 @@ WHITELIST_CSV = "whitelist.csv"
 BLACKLIST_CSV = "blacklist.csv"
 KEYWORDS_CSV = "keywords.csv"
 
+# Retry configuration for Windows file operations
+MAX_RETRIES = 3
+RETRY_DELAY = 0.1  # seconds
+TIMEOUT_SECONDS = 5  # Maximum time to wait for file access
+
 # In-memory fallback storage
 _memory_whitelist = set()
 _memory_blacklist = {}
@@ -61,11 +68,42 @@ def _file_lock(file_path, mode='r'):
         # Ensure directory exists
         Path(file_path).parent.mkdir(parents=True, exist_ok=True)
         
-        # Open file
-        file_obj = open(file_path, mode, newline='' if 'b' not in mode else None)
+        # For Windows, use atomic operations with temporary files for writes
+        if MSVCRT_AVAILABLE and ('w' in mode or 'a' in mode):
+            # Use atomic write pattern for Windows
+            temp_file = None
+            try:
+                if 'w' in mode:
+                    # Atomic write: write to temp file, then rename
+                    temp_fd, temp_path = tempfile.mkstemp(dir=Path(file_path).parent, suffix='.tmp')
+                    temp_file = os.fdopen(temp_fd, mode, newline='' if 'b' not in mode else None)
+                    yield temp_file
+                    temp_file.close()
+                    
+                    # Atomic rename
+                    if os.path.exists(temp_path):
+                        shutil.move(temp_path, file_path)
+                    return
+                else:
+                    # For append mode, use regular file with retries
+                    file_obj = open(file_path, mode, newline='' if 'b' not in mode else None)
+            except Exception:
+                if temp_file:
+                    try:
+                        temp_file.close()
+                        if 'temp_path' in locals() and os.path.exists(temp_path):
+                            os.unlink(temp_path)
+                    except:
+                        pass
+                # Fallback to regular file
+                if not file_obj:
+                    file_obj = open(file_path, mode, newline='' if 'b' not in mode else None)
+        else:
+            # Regular file opening for read mode or Unix systems
+            file_obj = open(file_path, mode, newline='' if 'b' not in mode else None)
         
         # Apply file lock based on platform
-        if FCNTL_AVAILABLE:
+        if FCNTL_AVAILABLE and file_obj:
             # Unix/Linux/macOS
             try:
                 if 'w' in mode or 'a' in mode:
@@ -76,24 +114,29 @@ def _file_lock(file_path, mode='r'):
             except (IOError, OSError):
                 # Lock failed, continue without lock
                 logger.debug(f"Could not acquire file lock for {file_path}")
-        elif MSVCRT_AVAILABLE:
-            # Windows - simplified approach to avoid permission issues
-            try:
-                # Try to lock just 1 byte at the beginning of the file
-                file_obj.seek(0)
-                msvcrt.locking(file_obj.fileno(), msvcrt.LK_NBLCK, 1)
-                lock_acquired = True
-            except (OSError, IOError):
-                # Lock failed, continue without lock (Windows can be problematic)
-                logger.debug(f"Could not acquire Windows file lock for {file_path}")
+        elif MSVCRT_AVAILABLE and file_obj:
+            # Windows - minimal locking for read operations only
+            if 'r' in mode:
+                try:
+                    # Try to lock just 1 byte at the beginning of the file
+                    file_obj.seek(0)
+                    msvcrt.locking(file_obj.fileno(), msvcrt.LK_NBLCK, 1)
+                    lock_acquired = True
+                except (OSError, IOError):
+                    # Lock failed, continue without lock (Windows can be problematic)
+                    logger.debug(f"Could not acquire Windows file lock for {file_path}")
         
-        yield file_obj
+        if file_obj:
+            yield file_obj
         
     except PermissionError:
         # Handle Windows permission errors gracefully
         logger.warning(f"Permission denied for file {file_path}, attempting fallback")
         if file_obj:
-            file_obj.close()
+            try:
+                file_obj.close()
+            except:
+                pass
         # Try opening in a simpler mode
         try:
             file_obj = open(file_path, mode.replace('x', 'w'), newline='' if 'b' not in mode else None)
@@ -114,7 +157,8 @@ def _file_lock(file_path, mode='r'):
                     file_obj = open(file_path, mode, newline='' if 'b' not in mode else None)
                 else:
                     raise
-        yield file_obj
+        if file_obj:
+            yield file_obj
     finally:
         if file_obj:
             try:
@@ -123,12 +167,14 @@ def _file_lock(file_path, mode='r'):
                     if FCNTL_AVAILABLE:
                         fcntl.flock(file_obj.fileno(), fcntl.LOCK_UN)
                     elif MSVCRT_AVAILABLE:
-                        file_obj.seek(0)
-                        msvcrt.locking(file_obj.fileno(), msvcrt.LK_UNLCK, 1)
-            except:
-                pass
-            finally:
+                        try:
+                            file_obj.seek(0)
+                            msvcrt.locking(file_obj.fileno(), msvcrt.LK_UNLCK, 1)
+                        except:
+                            pass
                 file_obj.close()
+            except Exception as e:
+                logger.debug(f"Error closing file {file_path}: {e}")
 
 def _safe_csv_operation(operation, *args, max_retries=5, base_delay=0.01, **kwargs):
     """Safely perform CSV operation with retry logic and exponential backoff."""
@@ -161,14 +207,14 @@ def _get_storage_mode():
     try:
         from flask import current_app
         
-        # Check for database first
+        # First check if CSV is explicitly enabled
+        if current_app.config.get('AIWAF_USE_CSV', True):
+            return 'csv'
+        
+        # Check for database only if CSV is disabled
         if (DB_AVAILABLE and hasattr(current_app, 'extensions') and 
             'sqlalchemy' in current_app.extensions):
             return 'database'
-        
-        # Check for CSV storage configuration
-        if current_app.config.get('AIWAF_USE_CSV', True):
-            return 'csv'
             
     except:
         pass
@@ -230,7 +276,7 @@ def _read_csv_whitelist():
     return _safe_csv_operation(_read_operation)
 
 def _append_csv_whitelist(ip):
-    """Append IP to whitelist CSV with thread safety."""
+    """Append IP to whitelist CSV with thread safety and atomic operations."""
     def _append_operation():
         _ensure_csv_files()
         csv_file = Path(_get_data_dir()) / WHITELIST_CSV
@@ -244,10 +290,33 @@ def _append_csv_whitelist(ip):
             if ip in current_whitelist:
                 return  # Already exists
             
-            with _file_lock(csv_file, 'a') as f:
-                writer = csv.writer(f)
-                writer.writerow([ip, datetime.now().isoformat()])
-                logger.debug(f"Added IP {ip} to whitelist")
+            # Use atomic write pattern on Windows for better concurrency
+            if MSVCRT_AVAILABLE:
+                # Read all data, add new entry, write atomically
+                all_data = []
+                
+                # Read existing data
+                try:
+                    with _file_lock(csv_file, 'r') as f:
+                        reader = csv.reader(f)
+                        all_data = list(reader)
+                except FileNotFoundError:
+                    all_data = [['ip', 'timestamp']]  # Header
+                
+                # Add new entry
+                all_data.append([ip, datetime.now().isoformat()])
+                
+                # Write atomically
+                with _file_lock(csv_file, 'w') as f:
+                    writer = csv.writer(f)
+                    writer.writerows(all_data)
+            else:
+                # Unix systems can use append safely
+                with _file_lock(csv_file, 'a') as f:
+                    writer = csv.writer(f)
+                    writer.writerow([ip, datetime.now().isoformat()])
+            
+            logger.debug(f"Added IP {ip} to whitelist")
     
     return _safe_csv_operation(_append_operation)
 
@@ -401,8 +470,14 @@ def is_ip_whitelisted(ip):
     
     if storage_mode == 'database':
         try:
-            return WhitelistedIP.query.filter_by(ip=ip).first() is not None
+            # Additional check to ensure database is properly initialized
+            from flask import current_app
+            if hasattr(current_app, 'extensions') and 'sqlalchemy' in current_app.extensions:
+                return WhitelistedIP.query.filter_by(ip=ip).first() is not None
+            else:
+                storage_mode = 'csv'
         except Exception:
+            # Fallback to CSV on any database error
             storage_mode = 'csv'
     
     if storage_mode == 'csv':
@@ -472,8 +547,14 @@ def is_ip_blacklisted(ip):
     
     if storage_mode == 'database':
         try:
-            return BlacklistedIP.query.filter_by(ip=ip).first() is not None
+            # Additional check to ensure database is properly initialized
+            from flask import current_app
+            if hasattr(current_app, 'extensions') and 'sqlalchemy' in current_app.extensions:
+                return BlacklistedIP.query.filter_by(ip=ip).first() is not None
+            else:
+                storage_mode = 'csv'
         except Exception:
+            # Fallback to CSV on any database error
             storage_mode = 'csv'
     
     if storage_mode == 'csv':

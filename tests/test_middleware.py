@@ -18,6 +18,10 @@ def middleware_app():
     app.config['AIWAF_RATE_FLOOD'] = 3
     app.config['AIWAF_MIN_FORM_TIME'] = 0.5
     
+    # Force database mode for tests and disable path exemptions
+    app.config['AIWAF_USE_CSV'] = False
+    app.config['AIWAF_EXEMPT_PATHS'] = set()
+    
     db.init_app(app)
     
     with app.app_context():

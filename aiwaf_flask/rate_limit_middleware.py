@@ -1,7 +1,7 @@
 # Flask-adapted RateLimitMiddleware
 import time
 from flask import request, jsonify, current_app
-from .utils import get_ip
+from .utils import get_ip, is_exempt
 from .blacklist_manager import BlacklistManager
 
 _aiwaf_cache = {}
@@ -15,6 +15,10 @@ class RateLimitMiddleware:
     def init_app(self, app):
         @app.before_request
         def before_request():
+            # Check if request should be exempt from rate limiting
+            if is_exempt(request):
+                return None  # Allow request to proceed
+            
             ip = get_ip()
             key = f"ratelimit:{ip}"
             now = time.time()

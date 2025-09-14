@@ -1,7 +1,7 @@
 # Flask-adapted IPAndKeywordBlockMiddleware
 import re
 from flask import request, jsonify
-from .utils import get_ip
+from .utils import get_ip, is_exempt
 from .blacklist_manager import BlacklistManager
 from .storage import get_keyword_store
 
@@ -14,6 +14,10 @@ class IPAndKeywordBlockMiddleware:
     def init_app(self, app):
         @app.before_request
         def before_request():
+            # Check if request should be exempt from AIWAF protection
+            if is_exempt(request):
+                return None  # Allow request to proceed
+            
             ip = get_ip()
             path = request.path.lower()
             

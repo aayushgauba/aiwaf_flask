@@ -9,6 +9,7 @@ AIWAF (AI Web Application Firewall) for Flask provides advanced, self-learning p
 - Header validation
 - Anomaly detection (extensible)
 - UUID tampering detection
+- **Path exemptions** - Prevent false positives for legitimate resources
 - **Flexible storage**: Database, CSV files, or in-memory
 - Zero-dependency protection (works without database)
 
@@ -90,7 +91,88 @@ app.config['AIWAF_MIN_FORM_TIME'] = 2.0   # Minimum form submission time
 # CSV Storage (if enabled)
 app.config['AIWAF_USE_CSV'] = True        # Enable CSV storage
 app.config['AIWAF_DATA_DIR'] = 'aiwaf_data'  # CSV files directory
+
+# Path Exemptions
+app.config['AIWAF_EXEMPT_PATHS'] = {      # Paths exempt from AIWAF protection
+    '/favicon.ico',
+    '/robots.txt', 
+    '*.css',        # Wildcard patterns
+    '/static/',     # Directory patterns
+}
 ```
+
+## Path Exemptions (Prevent False Positives)
+
+AIWAF supports **path-based exemptions** to prevent false positives for legitimate resources that might return 404s or should not be subject to security filtering.
+
+### Default Exempt Paths
+
+AIWAF includes sensible defaults for common legitimate resources:
+
+```python
+# SEO and crawlers
+'/favicon.ico', '/robots.txt', '/sitemap.xml', '/ads.txt'
+
+# Apple and mobile devices  
+'/apple-touch-icon.png', '/manifest.json', '/browserconfig.xml'
+
+# Health checks and monitoring
+'/health', '/healthcheck', '/ping', '/status'
+
+# Well-known URIs (SSL certificates, security policies)
+'/.well-known/'
+
+# Static file extensions (wildcards)
+'*.css', '*.js', '*.png', '*.jpg', '*.ico', '*.woff2'
+
+# Static directories
+'/static/', '/assets/', '/css/', '/js/', '/images/', '/fonts/'
+```
+
+### Custom Path Exemptions
+
+Configure custom exempt paths for your application:
+
+```python
+# Override defaults with custom paths
+app.config['AIWAF_EXEMPT_PATHS'] = {
+    # Essential SEO files
+    '/favicon.ico',
+    '/robots.txt',
+    '/sitemap.xml',
+    
+    # Health monitoring  
+    '/health',
+    '/api/health',
+    
+    # Public APIs
+    '/api/public/',
+    '/webhook/github',
+    
+    # Static assets
+    '*.css', '*.js', '*.png', '*.pdf',
+    '/static/', '/assets/',
+    
+    # Custom application paths
+    '/special-public-endpoint',
+    '/custom-health-check',
+}
+```
+
+### Pattern Types
+
+- **Exact paths**: `/favicon.ico` (matches exactly)
+- **Wildcard patterns**: `*.css` (matches any .css file)  
+- **Directory patterns**: `/static/` (matches anything under /static/)
+- **Case insensitive**: `/FAVICON.ICO` also matches
+
+### Why Use Path Exemptions?
+
+- **Prevent SEO issues**: Search engines can safely crawl `/robots.txt`, `/sitemap.xml`
+- **Avoid blocking legitimate 404s**: `favicon.ico` requests won't trigger blocking
+- **Load balancer compatibility**: Health checks always work (`/health`, `/ping`)
+- **Static asset safety**: CSS/JS/images load without interference
+- **SSL certificate support**: `/.well-known/` URIs for ACME challenges
 
 ## Usage Examples
 

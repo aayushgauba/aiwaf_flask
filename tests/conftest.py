@@ -18,6 +18,12 @@ def app():
     app.config['AIWAF_RATE_FLOOD'] = 40
     app.config['AIWAF_MIN_FORM_TIME'] = 1.0
     
+    # Force database mode for tests (disable CSV to test database functionality)
+    app.config['AIWAF_USE_CSV'] = False
+    
+    # Disable path exemptions for tests to ensure middleware blocking works
+    app.config['AIWAF_EXEMPT_PATHS'] = set()
+    
     db.init_app(app)
     
     with app.app_context():
