@@ -114,6 +114,11 @@ app.config['AIWAF_MIN_FORM_TIME'] = 2.0   # Minimum form submission time
 app.config['AIWAF_USE_CSV'] = True        # Enable CSV storage
 app.config['AIWAF_DATA_DIR'] = 'aiwaf_data'  # CSV files directory
 
+# Logging Configuration
+app.config['AIWAF_ENABLE_LOGGING'] = True    # Enable request logging
+app.config['AIWAF_LOG_DIR'] = 'aiwaf_logs'   # Log files directory
+app.config['AIWAF_LOG_FORMAT'] = 'combined'  # Log format: combined, common, csv, json
+
 # Path Exemptions
 app.config['AIWAF_EXEMPT_PATHS'] = {      # Paths exempt from AIWAF protection
     '/favicon.ico',
@@ -195,6 +200,59 @@ app.config['AIWAF_EXEMPT_PATHS'] = {
 - **Load balancer compatibility**: Health checks always work (`/health`, `/ping`)
 - **Static asset safety**: CSS/JS/images load without interference
 - **SSL certificate support**: `/.well-known/` URIs for ACME challenges
+
+## Web Server Logging
+
+AIWAF Flask includes comprehensive logging that generates **standard web server logs** compatible with tools like Gunicorn, Nginx, and Apache log analyzers.
+
+### Log Formats
+
+#### **Combined Log Format (Default)**
+```
+127.0.0.1 - - [14/Sep/2025:15:02:41 +0000] "GET /api/data HTTP/1.1" 200 1234 "http://example.com" "Mozilla/5.0" 50ms - "-"
+203.0.113.10 - - [14/Sep/2025:15:02:42 +0000] "GET /admin.php HTTP/1.1" 403 0 "-" "BadBot/1.0" 10ms BLOCKED "Malicious keyword: .php"
+```
+
+#### **CSV Format (Easy Analysis)**
+```csv
+timestamp,ip,method,path,status_code,response_time_ms,blocked,block_reason
+2025-09-14T15:02:41,127.0.0.1,GET,/api/data,200,50,False,
+2025-09-14T15:02:42,203.0.113.10,GET,/admin.php,403,10,True,Malicious keyword: .php
+```
+
+#### **JSON Format (Structured)**
+```json
+{"timestamp": "2025-09-14T15:02:41", "ip": "127.0.0.1", "method": "GET", "path": "/api/data", "status_code": 200, "blocked": false}
+{"timestamp": "2025-09-14T15:02:42", "ip": "203.0.113.10", "method": "GET", "path": "/admin.php", "status_code": 403, "blocked": true, "block_reason": "Malicious keyword: .php"}
+```
+
+### Log Configuration
+
+```python
+app.config['AIWAF_ENABLE_LOGGING'] = True       # Enable logging
+app.config['AIWAF_LOG_DIR'] = 'logs'            # Log directory
+app.config['AIWAF_LOG_FORMAT'] = 'combined'     # Format: combined, common, csv, json
+```
+
+### Generated Log Files
+
+- **`access.log`** - All HTTP requests (main access log)
+- **`error.log`** - HTTP errors (4xx, 5xx status codes)
+- **`aiwaf.log`** - AIWAF security events and blocks
+
+### Log Analysis
+
+```bash
+# Analyze logs with detailed statistics
+python aiwaf_console.py logs --log-dir logs --format combined
+
+# Sample output:
+# 📊 AIWAF Access Log Analysis
+# Total Requests: 1,250
+# Blocked Requests: 45 (3.6%)
+# Average Response Time: 85ms
+# Top IPs, paths, block reasons, hourly patterns, etc.
+```
 
 ## Usage Examples
 

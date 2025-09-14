@@ -5,6 +5,7 @@ from .honeypot_timing_middleware import HoneypotTimingMiddleware
 from .header_validation_middleware import HeaderValidationMiddleware
 from .anomaly_middleware import AnomalyDetectionMiddleware
 from .uuid_tamper_middleware import UUIDTamperMiddleware
+from .logging_middleware import AIWAFLoggingMiddleware
 
 def register_aiwaf_middlewares(app, use_database=None):
     """
@@ -22,12 +23,20 @@ def register_aiwaf_middlewares(app, use_database=None):
     app.config.setdefault('AIWAF_MIN_FORM_TIME', 1.0)
     app.config.setdefault('AIWAF_USE_CSV', True)
     app.config.setdefault('AIWAF_DATA_DIR', 'aiwaf_data')
+    app.config.setdefault('AIWAF_LOG_DIR', 'aiwaf_logs')
+    app.config.setdefault('AIWAF_ENABLE_LOGGING', True)
     
     # Optionally initialize database if configured
     if use_database or (use_database is None and _should_use_database(app)):
         _init_database(app)
     
-    # Register all middleware
+    # Initialize logging middleware first (to capture all events)
+    if app.config.get('AIWAF_ENABLE_LOGGING', True):
+        logging_middleware = AIWAFLoggingMiddleware(app)
+        # Store reference for other middlewares to use
+        app.aiwaf_logger = logging_middleware
+    
+    # Register all security middleware
     IPAndKeywordBlockMiddleware(app)
     RateLimitMiddleware(app)
     HoneypotTimingMiddleware(app)

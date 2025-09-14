@@ -340,6 +340,75 @@ class AIWAFManager:
         except Exception as e:
             print(f"❌ Error importing configuration: {e}")
             return False
+    
+    def analyze_logs(self, log_dir: Optional[str] = None, log_format: str = 'combined'):
+        """Analyze AIWAF logs and show statistics."""
+        try:
+            from .logging_middleware import analyze_access_logs
+            
+            if log_dir:
+                stats = analyze_access_logs(log_dir, log_format)
+            else:
+                # Use default log directory
+                stats = analyze_access_logs('aiwaf_logs', log_format)
+            
+            if 'error' in stats:
+                print(f"❌ {stats['error']}")
+                return False
+            
+            print("\n📊 AIWAF Access Log Analysis")
+            print("=" * 50)
+            print(f"Total Requests: {stats['total_requests']}")
+            print(f"Blocked Requests: {stats['blocked_requests']}")
+            print(f"Unique IPs: {len(stats.get('ips', {}))}")
+            print(f"Block Rate: {(stats['blocked_requests']/stats['total_requests']*100):.1f}%" if stats['total_requests'] > 0 else "Block Rate: 0.0%")
+            
+            # Performance metrics
+            if 'avg_response_time' in stats:
+                print(f"Average Response Time: {stats['avg_response_time']:.0f}ms")
+                print(f"95th Percentile Response Time: {stats.get('p95_response_time', 0):.0f}ms")
+            
+            # Status code distribution
+            if stats.get('status_codes'):
+                print(f"\n📈 Status Code Distribution:")
+                for code, count in sorted(stats['status_codes'].items()):
+                    percentage = (count / stats['total_requests'] * 100) if stats['total_requests'] > 0 else 0
+                    print(f"  • {code}: {count} ({percentage:.1f}%)")
+            
+            # Top IPs
+            if stats.get('top_ips'):
+                print(f"\n🌐 Top Client IPs:")
+                for ip, count in stats['top_ips'][:5]:
+                    percentage = (count / stats['total_requests'] * 100) if stats['total_requests'] > 0 else 0
+                    print(f"  • {ip}: {count} requests ({percentage:.1f}%)")
+            
+            # Top paths
+            if stats.get('top_paths'):
+                print(f"\n� Most Requested Paths:")
+                for path, count in stats['top_paths'][:5]:
+                    print(f"  • {path}: {count} requests")
+            
+            # Blocked request reasons
+            if stats.get('blocked_reasons'):
+                print(f"\n🚫 Block Reasons:")
+                for reason, count in sorted(stats['blocked_reasons'].items(), key=lambda x: x[1], reverse=True):
+                    print(f"  • {reason}: {count} times")
+            
+            # Hourly distribution
+            if stats.get('hourly_distribution'):
+                print(f"\n🕐 Hourly Request Distribution:")
+                max_requests = max(stats['hourly_distribution'].values()) if stats['hourly_distribution'] else 1
+                for hour in sorted(stats['hourly_distribution'].keys()):
+                    count = stats['hourly_distribution'][hour]
+                    bar_length = int((count / max_requests) * 30)  # Scale to 30 chars max
+                    bar = "█" * bar_length
+                    print(f"  {hour}:00 {bar:<30} {count}")
+            
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error analyzing logs: {e}")
+            return False
 
 def main():
     """Main CLI interface."""
@@ -368,6 +437,12 @@ def main():
     
     # Stats command
     subparsers.add_parser('stats', help='Show statistics')
+    
+    # Log analysis command
+    logs_parser = subparsers.add_parser('logs', help='Analyze request logs')
+    logs_parser.add_argument('--log-dir', help='Custom log directory path')
+    logs_parser.add_argument('--format', choices=['combined', 'common', 'csv', 'json'], 
+                           default='combined', help='Log format to analyze')
     
     # Export/Import commands
     export_parser = subparsers.add_parser('export', help='Export configuration')
@@ -427,6 +502,10 @@ def main():
     
     elif args.command == 'stats':
         manager.show_stats()
+    
+    elif args.command == 'logs':
+        log_format = getattr(args, 'format', 'combined')
+        manager.analyze_logs(args.log_dir, log_format)
     
     elif args.command == 'export':
         manager.export_config(args.filename)
