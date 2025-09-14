@@ -88,7 +88,9 @@ class AIWAFLoggingMiddleware:
         response_time_ms = int((time.time() - start_time) * 1000)
         
         ip = self._get_client_ip()
-        timestamp = datetime.now().strftime('[%d/%b/%Y:%H:%M:%S %z]')
+        # Use a timezone-safe timestamp format for cross-platform compatibility
+        now = datetime.now()
+        timestamp = now.strftime('[%d/%b/%Y:%H:%M:%S +0000]')
         method = request.method
         path = request.full_path if request.query_string else request.path
         protocol = request.environ.get('SERVER_PROTOCOL', 'HTTP/1.1')
