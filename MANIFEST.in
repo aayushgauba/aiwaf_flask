@@ -1,0 +1,8 @@
+# MANIFEST.in for AIWAF Flask
+include README.md
+include LICENSE
+include pyproject.toml
+recursive-include aiwaf_flask *.py
+recursive-exclude tests *
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]

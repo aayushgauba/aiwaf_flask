@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aiwaf-flask"
+version = "0.1.0-beta"
+description = "AI Web Application Firewall for Flask with advanced protection features"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Aayush Gauba", email = "aayushgauba@example.com"}
+]
+maintainers = [
+    {name = "Aayush Gauba", email = "aayushgauba@example.com"}
+]
+keywords = [
+    "flask", "security", "firewall", "web", "protection", "middleware", 
+    "rate-limiting", "ip-blocking", "ddos", "waf"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Framework :: Flask",
+    "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+    "Topic :: Security",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+requires-python = ">=3.8"
+dependencies = [
+    "flask>=2.0.0",
+    "flask-sqlalchemy>=3.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "flask-testing>=0.8.1",
+    "pytest-cov>=4.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/aayushgauba/aiwaf-flask"
+Repository = "https://github.com/aayushgauba/aiwaf-flask.git"
+Documentation = "https://github.com/aayushgauba/aiwaf-flask#readme"
+"Bug Tracker" = "https://github.com/aayushgauba/aiwaf-flask/issues"
+
+[tool.setuptools]
+packages = ["aiwaf_flask"]
+
+[tool.setuptools.package-data]
+aiwaf_flask = ["*.py"]

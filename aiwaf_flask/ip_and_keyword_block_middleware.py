@@ -1,0 +1,36 @@
+# Flask-adapted IPAndKeywordBlockMiddleware
+import re
+from flask import request, jsonify
+from .utils import get_ip
+from .blacklist_manager import BlacklistManager
+from .storage import get_keyword_store
+
+class IPAndKeywordBlockMiddleware:
+    def __init__(self, app=None):
+        self.app = app
+        if app is not None:
+            self.init_app(app)
+
+    def init_app(self, app):
+        @app.before_request
+        def before_request():
+            ip = get_ip()
+            path = request.path.lower()
+            
+            # Check if IP is blacklisted first
+            if BlacklistManager.is_blocked(ip):
+                return jsonify({"error": "blocked"}), 403
+            
+            keyword_store = get_keyword_store()
+            malicious_keywords = [".php", "xmlrpc", "wp-", ".env", ".git", ".bak", "shell", "filemanager"]
+            segments = [seg for seg in re.split(r"\W+", path) if len(seg) > 3]
+            for kw in malicious_keywords:
+                if kw in path:
+                    keyword_store.add_keyword(kw)
+                    BlacklistManager.block(ip, f"Keyword block: {kw}")
+                    return jsonify({"error": "blocked"}), 403
+            # Block if segment matches learned keyword
+            for seg in segments:
+                if seg in keyword_store.get_top_keywords():
+                    BlacklistManager.block(ip, f"Learned keyword block: {seg}")
+                    return jsonify({"error": "blocked"}), 403
