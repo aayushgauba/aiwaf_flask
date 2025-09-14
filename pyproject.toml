@@ -9,10 +9,10 @@ description = "Advanced AI-powered Web Application Firewall for Flask with intel
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
-    {name = "Aayush Gauba", email = "aayushgauba@example.com"}
+    {name = "Aayush Gauba", email = "gauba.aayush@gmail.com"}
 ]
 maintainers = [
-    {name = "Aayush Gauba", email = "aayushgauba@example.com"}
+    {name = "Aayush Gauba", email = "gauba.aayush@gmail.com"}
 ]
 keywords = [
     "flask", "security", "firewall", "web", "protection", "middleware", 

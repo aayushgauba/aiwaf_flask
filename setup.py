@@ -13,7 +13,7 @@ setup(
     name="aiwaf-flask",
     version="0.1.2-beta",
     author="Aayush Gauba",
-    author_email="aayushgauba@example.com",
+    author_email="gauba.aayush@gmail.com",
     description="Advanced AI-powered Web Application Firewall for Flask with intelligent threat detection, rate limiting, IP blocking, and real-time protection against web attacks",
     long_description=long_description,
     long_description_content_type="text/markdown",
