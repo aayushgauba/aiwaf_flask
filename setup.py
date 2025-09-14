@@ -46,7 +46,18 @@ setup(
         "flask-sqlalchemy>=3.0.0",
     ],
     extras_require={
+        "ai": [
+            "numpy>=1.20.0",
+            "scikit-learn>=1.0.0",
+        ],
         "dev": [
+            "pytest>=7.0.0",
+            "flask-testing>=0.8.1",
+            "pytest-cov>=4.0.0",
+        ],
+        "all": [
+            "numpy>=1.20.0",
+            "scikit-learn>=1.0.0",
             "pytest>=7.0.0",
             "flask-testing>=0.8.1",
             "pytest-cov>=4.0.0",
@@ -60,6 +71,7 @@ setup(
         'console_scripts': [
             'aiwaf-console=aiwaf_flask.cli:main',
             'aiwaf=aiwaf_flask.cli:main',
+            'aiwaf-train=train_aiwaf:main',
         ],
     },
     include_package_data=True,

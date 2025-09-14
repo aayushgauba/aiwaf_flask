@@ -455,8 +455,11 @@ def get_exemption_store():
     return ExemptionStore()
 
 class KeywordStore:
-    def add_keyword(self, kw):
+    def add_keyword(self, kw, count=1):
+        # Note: Current implementation doesn't store count, just presence
         add_keyword(kw)
+    def remove_keyword(self, kw):
+        remove_keyword(kw)
     def get_top_keywords(self, n=10):
         return get_top_keywords(n)
 

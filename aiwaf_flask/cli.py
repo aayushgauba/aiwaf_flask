@@ -409,6 +409,65 @@ class AIWAFManager:
         except Exception as e:
             print(f"❌ Error analyzing logs: {e}")
             return False
+    
+    def train_model(self, log_dir: Optional[str] = None, disable_ai: bool = False, verbose: bool = False):
+        """Train AIWAF AI model from access logs."""
+        try:
+            from flask import Flask
+            from .trainer import train_from_logs
+            
+            if verbose:
+                print("🚀 AIWAF Flask Training Tool")
+                print("=" * 40)
+                print(f"Log directory: {log_dir or 'aiwaf_logs'}")
+                print(f"AI training: {'disabled' if disable_ai else 'enabled'}")
+                print("=" * 40)
+            
+            # Create minimal Flask app for training
+            app = Flask(__name__)
+            
+            # Configure AIWAF settings
+            app.config['AIWAF_LOG_DIR'] = log_dir or 'aiwaf_logs'
+            app.config['AIWAF_DYNAMIC_TOP_N'] = 15
+            app.config['AIWAF_AI_CONTAMINATION'] = 0.05
+            
+            # Optional settings (can be customized)
+            app.config['AIWAF_EXEMPT_PATHS'] = {'/health', '/status', '/favicon.ico'}
+            app.config['AIWAF_EXEMPT_KEYWORDS'] = ['health', 'status', 'ping', 'check']
+            
+            # Set data directory for training
+            if hasattr(self, 'storage') and 'data_dir' in self.storage:
+                app.config['AIWAF_DATA_DIR'] = self.storage['data_dir']()
+            
+            # Run training with app context
+            with app.app_context():
+                train_from_logs(app, disable_ai=disable_ai)
+            
+            if verbose:
+                print("\n✅ Training completed successfully!")
+                if not disable_ai:
+                    print("🤖 AI model saved and ready for anomaly detection")
+                else:
+                    print("📚 Keyword learning completed")
+                print("🛡️  Enhanced protection is now active!")
+            else:
+                print("✅ Training completed successfully!")
+            
+            return True
+            
+        except ImportError as e:
+            if 'flask' in str(e).lower():
+                print("❌ Flask is required for training. Install with: pip install flask")
+            else:
+                print(f"❌ Missing training dependencies: {e}")
+                if not disable_ai:
+                    print("💡 Try with --disable-ai for keyword-only training")
+            return False
+        except Exception as e:
+            print(f"❌ Training failed: {e}")
+            if not disable_ai:
+                print("💡 Try with --disable-ai if AI dependencies are missing")
+            return False
 
 def main():
     """Main CLI interface."""
@@ -443,6 +502,14 @@ def main():
     logs_parser.add_argument('--log-dir', help='Custom log directory path')
     logs_parser.add_argument('--format', choices=['combined', 'common', 'csv', 'json'], 
                            default='combined', help='Log format to analyze')
+    
+    # Train command
+    train_parser = subparsers.add_parser('train', help='Train AI model from logs')
+    train_parser.add_argument('--log-dir', help='Custom log directory path (default: aiwaf_logs)')
+    train_parser.add_argument('--disable-ai', action='store_true', 
+                            help='Disable AI model training (keyword learning only)')
+    train_parser.add_argument('--verbose', '-v', action='store_true',
+                            help='Enable verbose output')
     
     # Export/Import commands
     export_parser = subparsers.add_parser('export', help='Export configuration')
@@ -506,6 +573,9 @@ def main():
     elif args.command == 'logs':
         log_format = getattr(args, 'format', 'combined')
         manager.analyze_logs(args.log_dir, log_format)
+    
+    elif args.command == 'train':
+        manager.train_model(args.log_dir, args.disable_ai, args.verbose)
     
     elif args.command == 'export':
         manager.export_config(args.filename)

@@ -3,46 +3,38 @@ from .ip_and_keyword_block_middleware import IPAndKeywordBlockMiddleware
 from .rate_limit_middleware import RateLimitMiddleware
 from .honeypot_timing_middleware import HoneypotTimingMiddleware
 from .header_validation_middleware import HeaderValidationMiddleware
-from .anomaly_middleware import AnomalyDetectionMiddleware
+from .anomaly_middleware import AIAnomalyMiddleware
 from .uuid_tamper_middleware import UUIDTamperMiddleware
 from .logging_middleware import AIWAFLoggingMiddleware
 
-def register_aiwaf_middlewares(app, use_database=None):
+def register_aiwaf_middlewares(app, use_database=None, middlewares=None, disable_middlewares=None):
     """
-    Register all AIWAF middlewares with the Flask app.
+    Register AIWAF middlewares with the Flask app.
     
     Args:
         app: Flask application instance
         use_database: Optional boolean to force database usage.
                      If None, auto-detects based on configuration.
+        middlewares: List of middleware names to enable (if None, enables all)
+        disable_middlewares: List of middleware names to disable
+        
+    Available middlewares:
+        - ip_keyword_block: IP and keyword blocking
+        - rate_limit: Rate limiting protection
+        - honeypot: Honeypot timing protection
+        - header_validation: HTTP header validation
+        - ai_anomaly: AI-powered anomaly detection
+        - uuid_tamper: UUID tampering protection
+        - logging: Request/response logging
     """
-    # Set default configurations if not present
-    app.config.setdefault('AIWAF_RATE_WINDOW', 60)
-    app.config.setdefault('AIWAF_RATE_MAX', 100)
-    app.config.setdefault('AIWAF_RATE_FLOOD', 200)
-    app.config.setdefault('AIWAF_MIN_FORM_TIME', 1.0)
-    app.config.setdefault('AIWAF_USE_CSV', True)
-    app.config.setdefault('AIWAF_DATA_DIR', 'aiwaf_data')
-    app.config.setdefault('AIWAF_LOG_DIR', 'aiwaf_logs')
-    app.config.setdefault('AIWAF_ENABLE_LOGGING', True)
+    # Import the main AIWAF class to handle registration
+    from . import AIWAF
     
-    # Optionally initialize database if configured
-    if use_database or (use_database is None and _should_use_database(app)):
-        _init_database(app)
+    # Create AIWAF instance with specified configuration
+    aiwaf = AIWAF()
+    aiwaf.init_app(app, middlewares, disable_middlewares, use_database)
     
-    # Initialize logging middleware first (to capture all events)
-    if app.config.get('AIWAF_ENABLE_LOGGING', True):
-        logging_middleware = AIWAFLoggingMiddleware(app)
-        # Store reference for other middlewares to use
-        app.aiwaf_logger = logging_middleware
-    
-    # Register all security middleware
-    IPAndKeywordBlockMiddleware(app)
-    RateLimitMiddleware(app)
-    HoneypotTimingMiddleware(app)
-    HeaderValidationMiddleware(app)
-    AnomalyDetectionMiddleware(app)
-    UUIDTamperMiddleware(app)
+    return aiwaf
 
 def _should_use_database(app):
     """Check if the app has database configuration."""

@@ -7,7 +7,7 @@ AIWAF (AI Web Application Firewall) for Flask provides advanced, self-learning p
 - Rate limiting with burst detection
 - Honeypot timing protection
 - Header validation
-- Anomaly detection (extensible)
+- **AI-powered anomaly detection** - Machine learning to detect suspicious patterns
 - UUID tampering detection
 - **Path exemptions** - Prevent false positives for legitimate resources
 - **Flexible storage**: Database, CSV files, or in-memory
@@ -38,9 +38,149 @@ register_aiwaf_middlewares(app)
 ## Installation
 
 ```bash
-pip install flask flask-sqlalchemy  # For database storage
-# OR
-pip install flask  # For CSV/in-memory storage only
+# Basic installation (without AI features)
+pip install aiwaf-flask
+
+# With AI anomaly detection features
+pip install aiwaf-flask[ai]
+
+# Full installation (AI + development tools)
+pip install aiwaf-flask[all]
+```
+
+### AI Dependencies
+
+The AI anomaly detection middleware requires additional dependencies:
+- **NumPy** (`>=1.20.0`) - For numerical computations and feature analysis
+- **Scikit-learn** (`>=1.0.0`) - For machine learning model training and prediction
+
+```bash
+# Install AI dependencies separately if needed
+pip install numpy>=1.20.0 scikit-learn>=1.0.0
+```
+
+## Quick Start
+
+### Basic Setup (All Middlewares)
+
+```python
+from flask import Flask
+from aiwaf_flask import AIWAF
+
+app = Flask(__name__)
+app.config['SECRET_KEY'] = 'your-secret-key'
+
+# Enable all AIWAF protections (default behavior)
+aiwaf = AIWAF(app)  # ← Automatically enables ALL 7 middlewares
+
+@app.route('/')
+def home():
+    return 'Hello, AIWAF!'
+
+if __name__ == '__main__':
+    app.run(debug=True)
+```
+
+### Default Behavior
+
+**When you don't specify any middlewares, AIWAF automatically enables ALL available middlewares:**
+
+```python
+# These are all equivalent - they all enable ALL middlewares:
+aiwaf = AIWAF(app)                    # ← Default: enables all 7 middlewares
+aiwaf = AIWAF(app, middlewares=None)  # ← Same as above
+aiwaf = AIWAF()                       # ← Then call aiwaf.init_app(app)
+aiwaf.init_app(app)                   # ← Also enables all middlewares
+```
+
+### Customized Middleware Selection
+
+If you want **specific control**, you can selectively enable or disable middlewares:
+
+```python
+from flask import Flask
+from aiwaf_flask import AIWAF
+
+app = Flask(__name__)
+app.config['SECRET_KEY'] = 'your-secret-key'
+
+# Option 1: Enable ONLY specific middlewares
+aiwaf = AIWAF(app, middlewares=[
+    'rate_limit',           # Rate limiting protection
+    'header_validation',    # HTTP header validation  
+    'ai_anomaly',          # AI-powered anomaly detection
+    'logging'              # Request/response logging
+])
+
+# Option 2: Enable ALL middlewares EXCEPT specified ones
+aiwaf = AIWAF(app, disable_middlewares=[
+    'honeypot',            # Disable honeypot timing
+    'uuid_tamper'          # Disable UUID tampering protection
+])
+# ↑ Enables 5 out of 7 middlewares (all except the 2 disabled)
+
+# Option 3: Minimal security setup (essentials only)
+aiwaf = AIWAF(app, middlewares=[
+    'ip_keyword_block',    # Core IP/keyword blocking
+    'rate_limit',          # Rate limiting
+    'logging'              # Activity logging
+])
+# ↑ Enables only 3 specific middlewares
+```
+
+### Available Middlewares
+
+| Middleware | Name | Description |
+|------------|------|-------------|
+| **IP & Keyword Block** | `ip_keyword_block` | Blocks malicious IPs and detects attack keywords |
+| **Rate Limiting** | `rate_limit` | Protects against brute force and DDoS attacks |
+| **Honeypot Timing** | `honeypot` | Detects automated form submissions |
+| **Header Validation** | `header_validation` | Validates HTTP headers for security threats |
+| **AI Anomaly Detection** | `ai_anomaly` | Machine learning-based pattern analysis |
+| **UUID Tampering** | `uuid_tamper` | Protects against UUID manipulation attacks |
+| **Request Logging** | `logging` | Comprehensive request/response logging |
+
+### Initialization Patterns
+
+| Pattern | Result | Use Case |
+|---------|--------|----------|
+| `AIWAF(app)` | **Enables ALL 7 middlewares** | Default - maximum protection |
+| `AIWAF(app, middlewares=[...])` | Enables only specified | Custom selection |
+| `AIWAF(app, disable_middlewares=[...])` | Enables all except specified | Mostly default with exceptions |
+| `AIWAF()` then `init_app(app)` | **Enables ALL 7 middlewares** | Factory pattern |
+
+### Middleware Management
+
+```python
+# Check which middlewares are enabled
+enabled = aiwaf.get_enabled_middlewares()
+print(f"Active protections: {enabled}")
+
+# Check if specific middleware is enabled
+if aiwaf.is_middleware_enabled('ai_anomaly'):
+    print("AI protection is active")
+
+# Get middleware instance for advanced configuration
+rate_limiter = aiwaf.get_middleware_instance('rate_limit')
+
+# List all available middlewares
+available = AIWAF.list_available_middlewares()
+print(f"Available: {available}")
+```
+
+## Legacy Compatibility
+
+The old registration method still works with new customization options:
+
+```python
+from aiwaf_flask import register_aiwaf_middlewares
+
+# Legacy method with new features
+register_aiwaf_middlewares(
+    app, 
+    middlewares=['rate_limit', 'ai_anomaly'],
+    disable_middlewares=['honeypot']
+)
 ```
 
 ## Storage Options
@@ -48,9 +188,10 @@ pip install flask  # For CSV/in-memory storage only
 ### 1. **CSV Storage (Recommended for small apps)**
 ```python
 from flask import Flask
-from aiwaf_flask import register_aiwaf_middlewares
+from aiwaf_flask import AIWAF
 
 app = Flask(__name__)
+app.config['SECRET_KEY'] = 'your-secret-key'
 
 # CSV Configuration (no database needed!)
 app.config['AIWAF_USE_CSV'] = True
@@ -60,23 +201,31 @@ app.config['AIWAF_DATA_DIR'] = 'aiwaf_data'  # Optional: custom directory
 app.config['AIWAF_RATE_WINDOW'] = 60
 app.config['AIWAF_RATE_MAX'] = 100
 
-register_aiwaf_middlewares(app)
+# Initialize with custom middleware selection
+aiwaf = AIWAF(app, middlewares=['rate_limit', 'ip_keyword_block', 'logging'])
 ```
 
 ### 2. **Database Storage (Recommended for production)**
 ```python
 from flask import Flask
 from aiwaf_flask.db_models import db
-from aiwaf_flask import register_aiwaf_middlewares
+from aiwaf_flask import AIWAF
 
 app = Flask(__name__)
+app.config['SECRET_KEY'] = 'your-secret-key'
 
 # Database Configuration
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///aiwaf.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['AIWAF_USE_CSV'] = False  # Force database usage
 
 # AIWAF Settings
 app.config['AIWAF_RATE_WINDOW'] = 60
+app.config['AIWAF_RATE_MAX'] = 100
+
+# Initialize with all middlewares
+aiwaf = AIWAF(app, use_database=True)
+```
 app.config['AIWAF_RATE_MAX'] = 100
 
 db.init_app(app)
@@ -99,6 +248,75 @@ app.config['AIWAF_USE_CSV'] = False
 register_aiwaf_middlewares(app, use_database=False)
 ```
 
+## Middleware Selection Guide
+
+### 🛡️ **Minimal Security (Essential Protection)**
+Best for: Small applications, development environments, minimal overhead
+
+```python
+aiwaf = AIWAF(app, middlewares=[
+    'ip_keyword_block',  # Core attack prevention
+    'rate_limit',        # Basic DDoS protection  
+    'logging'            # Security monitoring
+])
+```
+
+### 🚀 **Standard Security (Recommended)**
+Best for: Most production applications, balanced protection
+
+```python
+aiwaf = AIWAF(app, middlewares=[
+    'ip_keyword_block',   # Core attack prevention
+    'rate_limit',         # DDoS protection
+    'header_validation',  # HTTP security
+    'ai_anomaly',        # Smart threat detection
+    'logging'            # Security monitoring
+])
+```
+
+### 🔥 **Maximum Security (Full Protection)**
+Best for: High-security applications, sensitive data handling
+
+```python
+# Enable all middlewares (default)
+aiwaf = AIWAF(app)
+```
+
+### 🤖 **AI-Focused Security (Modern Protection)**
+Best for: Applications with complex user patterns, advanced threat detection
+
+```python
+aiwaf = AIWAF(app, middlewares=[
+    'ai_anomaly',         # Machine learning detection
+    'rate_limit',         # Intelligent rate limiting
+    'header_validation',  # Advanced header analysis
+    'logging'            # ML-enhanced logging
+])
+```
+
+### 🎯 **Custom Security (Selective Protection)**
+Best for: Specific requirements, performance optimization
+
+```python
+# Disable specific middlewares you don't need
+aiwaf = AIWAF(app, disable_middlewares=[
+    'honeypot',          # If no forms in your app
+    'uuid_tamper'        # If not using UUIDs
+])
+```
+
+### Performance Impact Guide
+
+| Middleware | Performance Impact | Use Case |
+|------------|-------------------|----------|
+| `ip_keyword_block` | **Low** | Essential for all apps |
+| `rate_limit` | **Low** | Essential for public apps |
+| `logging` | **Medium** | Important for monitoring |
+| `header_validation` | **Low** | Good for web APIs |
+| `ai_anomaly` | **Medium** | Advanced threat detection |
+| `honeypot` | **Low** | Only useful with forms |
+| `uuid_tamper` | **Very Low** | Only if using UUIDs |
+
 ## Configuration Options
 
 ```python
@@ -109,6 +327,11 @@ app.config['AIWAF_RATE_FLOOD'] = 200      # Auto-block threshold
 
 # Honeypot Protection
 app.config['AIWAF_MIN_FORM_TIME'] = 2.0   # Minimum form submission time
+
+# AI Anomaly Detection
+app.config['AIWAF_WINDOW_SECONDS'] = 60   # Analysis window for behavior patterns
+app.config['AIWAF_DYNAMIC_TOP_N'] = 10    # Top N patterns to track
+app.config['AIWAF_MODEL_PATH'] = 'aiwaf_flask/resources/model.pkl'  # ML model path
 
 # CSV Storage (if enabled)
 app.config['AIWAF_USE_CSV'] = True        # Enable CSV storage
@@ -200,6 +423,261 @@ app.config['AIWAF_EXEMPT_PATHS'] = {
 - **Load balancer compatibility**: Health checks always work (`/health`, `/ping`)
 - **Static asset safety**: CSS/JS/images load without interference
 - **SSL certificate support**: `/.well-known/` URIs for ACME challenges
+
+## AI-Powered Anomaly Detection
+
+AIWAF Flask includes advanced **machine learning-based anomaly detection** that analyzes request patterns and automatically identifies malicious behavior.
+
+### How It Works
+
+The AI anomaly detection middleware:
+
+1. **Analyzes Request Patterns**: Tracks path length, keyword hits, response times, status codes, and burst patterns
+2. **Uses Machine Learning**: Employs a trained model to detect anomalous behavior (requires NumPy)
+3. **Intelligent Blocking**: Only blocks after analyzing multiple indicators to avoid false positives
+4. **Dynamic Learning**: Learns new malicious keywords from scanning attempts
+
+### Key Features
+
+- **Multi-factor Analysis**: Combines ML predictions with behavioral analysis
+- **Smart Thresholds**: Distinguishes between legitimate 404s and malicious scanning
+- **Contextual Learning**: Only learns keywords from confirmed malicious contexts
+- **Pattern Recognition**: Detects common attack patterns (SQLi, XSS, directory traversal)
+
+### Configuration
+
+```python
+# AI Anomaly Detection Settings
+app.config['AIWAF_WINDOW_SECONDS'] = 60       # Analysis window (seconds)
+app.config['AIWAF_DYNAMIC_TOP_N'] = 10        # Top patterns to track  
+app.config['AIWAF_MODEL_PATH'] = 'path/to/model.pkl'  # ML model location
+
+# Install AI dependencies for full functionality
+# pip install aiwaf-flask[ai]
+# or: pip install numpy>=1.20.0 scikit-learn>=1.0.0
+```
+
+**Note**: AI anomaly detection requires NumPy and Scikit-learn. Install with `pip install aiwaf-flask[ai]` for full ML capabilities.
+
+### Detection Criteria
+
+The AI system analyzes multiple factors before blocking:
+
+- **Keyword Density**: Number of malicious keywords in requests
+- **Scanning Patterns**: Attempts to access non-existent admin/config files
+- **404 Analysis**: Distinguishes scanning vs. legitimate missing pages
+- **Burst Behavior**: Rapid successive requests indicating automation
+- **Response Time Patterns**: Unusual timing that may indicate probing
+
+### Examples of Detected Patterns
+
+```python
+# These patterns trigger AI analysis:
+GET /wp-admin/             # WordPress scanning
+GET /phpmyadmin/           # Database admin access attempts
+GET /.env                  # Environment file probing
+GET /config.php            # Configuration file access
+GET /backup.sql            # Backup file attempts
+GET /?cmd=whoami           # Command injection attempts
+GET /test?union=select     # SQL injection patterns
+```
+
+### Intelligent Blocking Logic
+
+The AI doesn't block on single suspicious requests. Instead, it analyzes:
+
+- **Recent behavior** (last 5 minutes)
+- **Total vs. scanning 404s**
+- **Average keyword hits**
+- **Burst patterns**
+- **Request volume**
+
+Only blocks when multiple indicators suggest malicious intent, preventing false positives for legitimate users.
+
+### AI Dependencies Troubleshooting
+
+#### **Checking AI Dependencies**
+
+```bash
+# Check if AI dependencies are available
+python -c "
+try:
+    import numpy, sklearn
+    print('✅ AI dependencies available')
+except ImportError as e:
+    print(f'❌ Missing: {e}')
+    print('Install with: pip install aiwaf-flask[ai]')
+"
+```
+
+## 📚 Training the AI Model
+
+AIWAF Flask includes a comprehensive training system that replicates Django's functionality, supporting multiple log formats and intelligent learning from thousands of log entries.
+
+### Basic Training
+
+```python
+from aiwaf_flask.trainer import train_from_logs
+
+# Train with your Flask app
+train_from_logs(app)
+
+# Or disable AI and use keyword learning only
+train_from_logs(app, disable_ai=True)
+```
+
+### Standalone Training Script
+
+Use the included training script for easy command-line training:
+
+```bash
+# Train with AI model (requires AI dependencies)
+python train_aiwaf.py --log-dir /path/to/logs
+
+# Train with keyword learning only (no AI dependencies needed)
+python train_aiwaf.py --disable-ai --log-dir /path/to/logs
+
+# Verbose output
+python train_aiwaf.py --verbose
+```
+
+### CLI Training Command
+
+The easiest way to train is using the built-in CLI command:
+
+```bash
+# Simple training with AI (auto-detects log format)
+aiwaf train
+
+# Train with keyword learning only
+aiwaf train --disable-ai
+
+# Train from custom log directory with verbose output
+aiwaf train --log-dir /path/to/logs --verbose
+
+# Show training options
+aiwaf train --help
+```
+
+### Supported Log Formats
+
+The trainer automatically detects and processes multiple log formats:
+
+1. **Apache/Nginx Access Logs** - Standard combined log format
+2. **CSV Logs** - With columns: timestamp, ip, method, path, status_code, user_agent, etc.
+3. **JSON/JSONL Logs** - Structured log files with request data
+
+### Training Features
+
+The comprehensive training system includes:
+
+- **Smart Keyword Learning**: Learns suspicious patterns from 404s and errors
+- **Context-Aware Filtering**: Distinguishes legitimate vs malicious keywords
+- **Flask Route Analysis**: Extracts legitimate keywords from your app's routes
+- **AI Anomaly Detection**: Machine learning model for behavior analysis
+- **Intelligent IP Blocking**: Blocks based on combined indicators
+- **Exemption Handling**: Respects IP exemptions and allowed keywords
+
+### Log Processing
+
+The trainer can handle large datasets efficiently:
+
+```python
+# Process 1000+ log entries with intelligent filtering
+train_from_logs(app)
+```
+
+Training analyzes:
+- Request patterns and frequencies
+- 404 error clustering
+- Response time anomalies  
+- Burst activity detection
+- Keyword context analysis
+- Path existence validation
+
+### Configuration
+
+Customize training behavior in your Flask app:
+
+```python
+app.config.update({
+    'AIWAF_LOG_DIR': 'logs/',
+    'AIWAF_DYNAMIC_TOP_N': 15,  # Top keywords to learn
+    'AIWAF_AI_CONTAMINATION': 0.05,  # AI sensitivity
+    'AIWAF_EXEMPT_KEYWORDS': ['api', 'health'],
+    'AIWAF_ALLOWED_PATH_KEYWORDS': ['dashboard', 'profile']
+})
+```
+
+### Training Output Example
+
+```
+🚀 Starting AIWAF Flask enhanced training...
+📁 Reading logs from: access.log
+📊 Total log lines found: 1247
+📋 Parsing 1247 log entries...
+✅ Successfully parsed 1205 log entries
+🚫 Blocked 3 IPs for excessive 404 errors
+🤖 Training AI anomaly detection model...
+💾 Model saved: aiwaf_flask/resources/model.pkl
+📊 Trained on 1205 samples with scikit-learn v1.3.0
+🔍 Detected 7 potentially anomalous IPs
+   🚫 203.0.113.10: Blocked for suspicious behavior
+📚 Learning suspicious keywords from logs...
+
+============================================================
+🤖 AIWAF FLASK ENHANCED TRAINING COMPLETE
+============================================================
+📊 Training Data: 1205 log entries processed
+🤖 AI Model: Trained with 7 features
+🚫 AI Blocked IPs: 1 suspicious IPs blocked
+📚 Keywords: 5 new suspicious keywords learned
+   📝 Keywords: ['xmlrpc', 'wp-config', 'phpmyadmin', 'backup', 'shell']
+🛡️  Exemptions: 2 IPs protected from blocking
+🚫 404 Blocking: 3 IPs blocked for excessive 404s
+✅ Enhanced AI protection now active with context-aware filtering!
+============================================================
+```
+
+#### **Checking AI Dependencies**
+
+```python
+# Check if AI dependencies are available
+def check_ai_dependencies():
+    try:
+        import numpy as np
+        import sklearn
+        print(f"✅ AI Ready: NumPy {np.__version__}, Scikit-learn {sklearn.__version__}")
+        return True
+    except ImportError as e:
+        print(f"❌ AI Missing: {e}")
+        print("Install with: pip install aiwaf-flask[ai]")
+        return False
+
+# Use in your application
+if check_ai_dependencies():
+    # Enable AI middleware
+    aiwaf = AIWAF(app, middlewares=['ai_anomaly', 'rate_limit', 'logging'])
+else:
+    # Fallback to non-AI middlewares
+    aiwaf = AIWAF(app, middlewares=['rate_limit', 'ip_keyword_block', 'logging'])
+```
+
+#### **Installation Options**
+
+| Installation | Command | Features |
+|--------------|---------|----------|
+| **Basic** | `pip install aiwaf-flask` | Core security (no AI) |
+| **AI Enabled** | `pip install aiwaf-flask[ai]` | Full AI capabilities |
+| **Development** | `pip install aiwaf-flask[all]` | AI + testing tools |
+| **Manual AI** | `pip install numpy scikit-learn` | Add AI to existing install |
+
+#### **Common Issues**
+
+- **"NumPy not available"** → Install with `pip install aiwaf-flask[ai]`
+- **"AI anomaly detection disabled"** → Normal when NumPy is missing
+- **Slow startup** → Consider disabling AI: `disable_middlewares=['ai_anomaly']`
+- **Memory usage** → AI uses ~50MB for ML models, disable if needed
 
 ## Web Server Logging
 
@@ -376,6 +854,22 @@ aiwaf import backup.json
 ```bash
 # Analyze logs with detailed statistics
 aiwaf logs --log-dir logs --format combined
+```
+
+### AI Model Training
+
+```bash
+# Train AI model from access logs (auto-detects log format)
+aiwaf train
+
+# Train with keyword learning only (no AI dependencies)
+aiwaf train --disable-ai
+
+# Train from custom log directory with verbose output
+aiwaf train --log-dir /path/to/logs --verbose
+
+# Train with specific options
+aiwaf train --log-dir logs --disable-ai --verbose
 ```
 
 ### Custom Data Directory
@@ -648,6 +1142,36 @@ class ProductionConfig:
 # app.py
 app.config.from_object(ProductionConfig)
 ```
+
+## Dependencies Summary
+
+### Core Dependencies (Always Required)
+- **Flask** (`>=2.0.0`) - Web framework
+- **Flask-SQLAlchemy** (`>=3.0.0`) - Database ORM (optional for CSV mode)
+
+### AI Dependencies (Optional for Enhanced Security)
+- **NumPy** (`>=1.20.0`) - Numerical computations for ML features
+- **Scikit-learn** (`>=1.0.0`) - Machine learning model training and prediction
+
+### Installation Matrix
+
+| Feature Set | Command | Dependencies Installed |
+|-------------|---------|----------------------|
+| **Basic Security** | `pip install aiwaf-flask` | Flask, Flask-SQLAlchemy |
+| **AI Enhanced** | `pip install aiwaf-flask[ai]` | Basic + NumPy, Scikit-learn |
+| **Development** | `pip install aiwaf-flask[all]` | AI + pytest, coverage tools |
+
+### Middleware Dependency Requirements
+
+| Middleware | Dependencies | Notes |
+|------------|-------------|-------|
+| `ip_keyword_block` | Core only | Always available |
+| `rate_limit` | Core only | Always available |
+| `header_validation` | Core only | Always available |
+| `honeypot` | Core only | Always available |
+| `uuid_tamper` | Core only | Always available |
+| `logging` | Core only | Always available |
+| **`ai_anomaly`** | **NumPy + Scikit-learn** | **Requires AI dependencies** |
 
 ## License
 MIT
