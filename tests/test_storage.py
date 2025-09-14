@@ -1,4 +1,6 @@
 import pytest
+import tempfile
+import shutil
 from aiwaf_flask.storage import (
     is_ip_whitelisted, add_ip_whitelist,
     is_ip_blacklisted, add_ip_blacklist, remove_ip_blacklist,
@@ -69,3 +71,58 @@ def test_get_top_keywords(app_context):
     assert len(top_keywords) == 2
     for kw in top_keywords:
         assert kw in keywords
+
+# CSV-specific tests
+@pytest.fixture
+def csv_app():
+    """Create Flask app configured for CSV storage."""
+    from flask import Flask
+    
+    app = Flask(__name__)
+    app.config['TESTING'] = True
+    app.config['AIWAF_USE_CSV'] = True
+    
+    # Create temporary directory for CSV files
+    temp_dir = tempfile.mkdtemp()
+    app.config['AIWAF_DATA_DIR'] = temp_dir
+    
+    yield app
+    
+    # Cleanup
+    shutil.rmtree(temp_dir, ignore_errors=True)
+
+@pytest.fixture
+def csv_app_context(csv_app):
+    """Create application context for CSV storage."""
+    with csv_app.app_context():
+        yield csv_app
+
+def test_csv_storage_whitelist(csv_app_context):
+    """Test CSV storage for whitelist operations."""
+    ip = '192.168.100.1'
+    
+    # Test add and check
+    add_ip_whitelist(ip)
+    assert is_ip_whitelisted(ip)
+
+def test_csv_storage_blacklist(csv_app_context):
+    """Test CSV storage for blacklist operations."""
+    ip = '10.10.10.1'
+    reason = 'CSV test'
+    
+    # Test add and check
+    add_ip_blacklist(ip, reason)
+    assert is_ip_blacklisted(ip)
+    
+    # Test removal
+    remove_ip_blacklist(ip)
+    assert not is_ip_blacklisted(ip)
+
+def test_csv_storage_keywords(csv_app_context):
+    """Test CSV storage for keywords."""
+    keyword = 'csv_test_keyword'
+    
+    # Test add and check
+    add_keyword(keyword)
+    keywords = get_top_keywords()
+    assert keyword in keywords
