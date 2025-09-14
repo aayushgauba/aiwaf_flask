@@ -7,3 +7,9 @@ from .honeypot_timing_middleware import HoneypotTimingMiddleware
 from .header_validation_middleware import HeaderValidationMiddleware
 from .anomaly_middleware import AnomalyDetectionMiddleware
 from .uuid_tamper_middleware import UUIDTamperMiddleware
+
+# Backward compatibility alias
+register_aiwaf_protection = register_aiwaf_middlewares
+
+# Backward compatibility alias
+register_aiwaf_protection = register_aiwaf_middlewares

@@ -1,14 +1,15 @@
 from flask import Flask, request, jsonify
-from aiwaf_flask.flask_integration import AIWAF
-
-# Import your AIWAF middleware from the main aiwaf package
-from aiwaf.middleware import AIWAFMiddleware
+from aiwaf_flask.middleware import register_aiwaf_middlewares
 
 app = Flask(__name__)
 
-# Initialize AIWAF middleware and integrate with Flask
-aiwaf_middleware = AIWAFMiddleware()
-aiwaf = AIWAF(app, aiwaf_middleware)
+# Configure AIWAF settings
+app.config['AIWAF_RATE_WINDOW'] = 60
+app.config['AIWAF_RATE_MAX'] = 100
+app.config['AIWAF_USE_CSV'] = True
+
+# Initialize AIWAF middleware
+register_aiwaf_middlewares(app)
 
 @app.route('/')
 def index():

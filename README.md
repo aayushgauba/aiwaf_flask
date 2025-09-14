@@ -13,6 +13,28 @@ AIWAF (AI Web Application Firewall) for Flask provides advanced, self-learning p
 - **Flexible storage**: Database, CSV files, or in-memory
 - Zero-dependency protection (works without database)
 
+## Function Names
+
+AIWAF Flask provides two function names for registering middleware:
+
+- **`register_aiwaf_middlewares(app)`** - Current recommended name
+- **`register_aiwaf_protection(app)`** - Backward compatibility alias
+
+Both functions work identically and provide the same protection features.
+
+```python
+from flask import Flask
+from aiwaf_flask import register_aiwaf_middlewares
+# OR: from aiwaf_flask import register_aiwaf_protection
+
+app = Flask(__name__)
+app.config['AIWAF_USE_CSV'] = True
+
+# Both of these work the same way:
+register_aiwaf_middlewares(app)
+# register_aiwaf_protection(app)  # Alternative
+```
+
 ## Installation
 
 ```bash
@@ -26,7 +48,7 @@ pip install flask  # For CSV/in-memory storage only
 ### 1. **CSV Storage (Recommended for small apps)**
 ```python
 from flask import Flask
-from aiwaf_flask.middleware import register_aiwaf_middlewares
+from aiwaf_flask import register_aiwaf_middlewares
 
 app = Flask(__name__)
 
@@ -45,7 +67,7 @@ register_aiwaf_middlewares(app)
 ```python
 from flask import Flask
 from aiwaf_flask.db_models import db
-from aiwaf_flask.middleware import register_aiwaf_middlewares
+from aiwaf_flask import register_aiwaf_middlewares
 
 app = Flask(__name__)
 
@@ -67,7 +89,7 @@ register_aiwaf_middlewares(app)
 ### 3. **In-Memory Storage (For testing)**
 ```python
 from flask import Flask
-from aiwaf_flask.middleware import register_aiwaf_middlewares
+from aiwaf_flask import register_aiwaf_middlewares
 
 app = Flask(__name__)
 
