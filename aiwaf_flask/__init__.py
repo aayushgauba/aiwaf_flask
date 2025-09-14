@@ -11,5 +11,8 @@ from .uuid_tamper_middleware import UUIDTamperMiddleware
 # Backward compatibility alias
 register_aiwaf_protection = register_aiwaf_middlewares
 
-# Backward compatibility alias
-register_aiwaf_protection = register_aiwaf_middlewares
+# CLI management
+try:
+    from .cli import AIWAFManager
+except ImportError:
+    AIWAFManager = None

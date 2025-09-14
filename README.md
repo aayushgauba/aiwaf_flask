@@ -241,6 +241,316 @@ ip,reason,added_date
 192.168.1.50,Rate limit exceeded,2025-09-14T11:15:00
 ```
 
+## Command Line Management
+
+AIWAF Flask includes a powerful CLI tool for managing IP exemptions, blacklists, and blocked keywords from the command line.
+
+### Basic Usage
+
+```bash
+# Show help
+python aiwaf_console.py --help
+
+# Show current statistics
+python aiwaf_console.py stats
+
+# List all data
+python aiwaf_console.py list all
+```
+
+### IP Management
+
+```bash
+# Add IP to whitelist
+python aiwaf_console.py add whitelist 192.168.1.100
+
+# Add IP to blacklist with reason
+python aiwaf_console.py add blacklist 10.0.0.5 --reason "Brute force attack"
+
+# Remove IP from whitelist
+python aiwaf_console.py remove whitelist 192.168.1.100
+
+# Remove IP from blacklist
+python aiwaf_console.py remove blacklist 10.0.0.5
+
+# List specific data types
+python aiwaf_console.py list whitelist
+python aiwaf_console.py list blacklist
+```
+
+### Keyword Management
+
+```bash
+# Add blocked keyword
+python aiwaf_console.py add keyword "sql injection"
+python aiwaf_console.py add keyword "script"
+
+# List blocked keywords
+python aiwaf_console.py list keywords
+```
+
+### Configuration Backup/Restore
+
+```bash
+# Export current configuration
+python aiwaf_console.py export backup.json
+
+# Import configuration from backup
+python aiwaf_console.py import backup.json
+```
+
+### Custom Data Directory
+
+```bash
+# Use custom data directory
+python aiwaf_console.py --data-dir /path/to/custom/aiwaf_data stats
+```
+
+### Example CLI Session
+
+```bash
+# Check current status
+python aiwaf_console.py stats
+
+# Add some IPs to whitelist
+python aiwaf_console.py add whitelist 192.168.1.100
+python aiwaf_console.py add whitelist 10.0.0.50
+
+# Block a malicious IP
+python aiwaf_console.py add blacklist 203.0.113.10 --reason "SQL injection attempts"
+
+# Add dangerous keywords
+python aiwaf_console.py add keyword "union select"
+python aiwaf_console.py add keyword "drop table"
+
+# Review all settings
+python aiwaf_console.py list all
+
+# Create backup
+python aiwaf_console.py export production_backup.json
+```
+
+### Programmatic Management
+
+You can also use the CLI functionality in your Python code:
+
+```python
+from aiwaf_flask.cli import AIWAFManager
+
+# Initialize manager
+manager = AIWAFManager()
+
+# Add IPs programmatically
+manager.add_to_whitelist("192.168.1.100")
+manager.add_to_blacklist("10.0.0.5", "Suspicious activity")
+
+# Get current lists
+whitelist = manager.list_whitelist()
+blacklist = manager.list_blacklist()
+keywords = manager.list_keywords()
+
+# Export configuration
+manager.export_config("backup.json")
+```
+
+## CLI Features & Real-World Examples
+
+AIWAF Flask includes powerful command-line tools for production management. The CLI works independently without requiring Flask to be installed, making it perfect for system administration and automation.
+
+### Quick Setup
+
+```bash
+# Show CLI status and help
+python aiwaf_setup.py
+
+# Install Flask if needed (optional for CLI-only usage)
+python aiwaf_setup.py install-flask
+
+# Run interactive demo
+python aiwaf_setup.py demo
+```
+
+### Production Management Examples
+
+#### **Emergency IP Blocking**
+```bash
+# Block attacking IPs immediately
+python aiwaf_console.py add blacklist 203.0.113.10 --reason "SQL injection attack detected"
+python aiwaf_console.py add blacklist 198.51.100.5 --reason "Brute force login attempts"
+python aiwaf_console.py add blacklist 10.0.0.1 --reason "Suspicious port scanning"
+
+# Verify blocks are active
+python aiwaf_console.py list blacklist
+```
+
+#### **Whitelist Management**
+```bash
+# Add trusted networks
+python aiwaf_console.py add whitelist 192.168.1.0/24
+python aiwaf_console.py add whitelist 10.0.0.0/8
+python aiwaf_console.py add whitelist 172.16.0.0/12
+
+# Add specific trusted IPs
+python aiwaf_console.py add whitelist 203.0.113.100  # Office IP
+python aiwaf_console.py add whitelist 198.51.100.200 # API partner
+```
+
+#### **Security Keywords**
+```bash
+# Block common attack patterns
+python aiwaf_console.py add keyword "union select"
+python aiwaf_console.py add keyword "drop table"
+python aiwaf_console.py add keyword "<script>"
+python aiwaf_console.py add keyword "javascript:"
+python aiwaf_console.py add keyword "eval("
+python aiwaf_console.py add keyword "base64_decode"
+
+# Review blocked keywords
+python aiwaf_console.py list keywords
+```
+
+#### **Daily Operations**
+```bash
+# Morning security check
+python aiwaf_console.py stats
+
+# Review recent blocks
+python aiwaf_console.py list blacklist
+
+# Create daily backup
+python aiwaf_console.py export "backup-$(date +%Y%m%d).json"
+
+# Clean up test entries
+python aiwaf_console.py remove whitelist 192.168.1.99
+python aiwaf_console.py remove blacklist 10.0.0.99
+```
+
+### Automation Scripts
+
+#### **Security Incident Response**
+```bash
+#!/bin/bash
+# incident_response.sh - Block multiple IPs from security incident
+
+MALICIOUS_IPS=(
+    "203.0.113.10"
+    "198.51.100.5" 
+    "192.0.2.15"
+    "198.51.100.25"
+)
+
+for ip in "${MALICIOUS_IPS[@]}"; do
+    python aiwaf_console.py add blacklist "$ip" --reason "Security incident #2025-001"
+done
+
+# Create incident backup
+python aiwaf_console.py export "incident-2025-001-backup.json"
+echo "Blocked ${#MALICIOUS_IPS[@]} IPs from security incident"
+```
+
+#### **Configuration Deployment**
+```bash
+#!/bin/bash
+# deploy_config.sh - Deploy AIWAF configuration to production
+
+# Backup current config
+python aiwaf_console.py export "backup-before-deploy-$(date +%Y%m%d-%H%M).json"
+
+# Deploy new configuration
+python aiwaf_console.py import "production-config.json"
+
+# Verify deployment
+python aiwaf_console.py stats
+python aiwaf_console.py list all
+```
+
+### Real CLI Session Output
+
+```bash
+$ python aiwaf_console.py stats
+📁 Using CSV storage: aiwaf_data
+
+📊 AIWAF Statistics
+==================================================
+Whitelisted IPs: 5
+Blacklisted IPs: 3
+Blocked Keywords: 8
+Storage Mode: CSV
+Data Directory: aiwaf_data
+
+$ python aiwaf_console.py list all
+📁 Using CSV storage: aiwaf_data
+
+🟢 Whitelisted IPs (5):
+  • 192.168.1.100
+  • 192.168.1.200
+  • 10.0.0.50
+  • 203.0.113.100
+  • 198.51.100.200
+
+🔴 Blacklisted IPs (3):
+  • 203.0.113.10 - SQL injection attack detected (2025-09-14T09:15:30)
+  • 198.51.100.5 - Brute force login attempts (2025-09-14T10:22:15)
+  • 10.0.0.1 - Suspicious port scanning (2025-09-14T11:45:22)
+
+🚫 Blocked Keywords (8):
+  • union select
+  • drop table
+  • <script>
+  • javascript:
+  • eval(
+  • base64_decode
+  • onload=
+  • document.cookie
+
+$ python aiwaf_console.py export production-backup.json
+📁 Using CSV storage: aiwaf_data
+✅ Configuration exported to production-backup.json
+```
+
+### Configuration Format
+
+The exported JSON configuration contains all security settings:
+
+```json
+{
+  "whitelist": [
+    "192.168.1.100",
+    "192.168.1.200",
+    "10.0.0.50"
+  ],
+  "blacklist": {
+    "203.0.113.10": {
+      "timestamp": "2025-09-14T09:15:30.123456",
+      "reason": "SQL injection attack detected"
+    },
+    "198.51.100.5": {
+      "timestamp": "2025-09-14T10:22:15.789012", 
+      "reason": "Brute force login attempts"
+    }
+  },
+  "keywords": [
+    "union select",
+    "drop table",
+    "<script>",
+    "eval("
+  ],
+  "exported_at": "2025-09-14T14:30:00.000000",
+  "storage_mode": "CSV"
+}
+```
+
+### Integration with Monitoring
+
+```bash
+# Add to crontab for daily reports
+0 9 * * * /path/to/python /path/to/aiwaf_console.py stats >> /var/log/aiwaf-daily.log
+
+# Add to monitoring script
+python aiwaf_console.py stats | grep -E "(Blacklisted|Keywords)" | \
+  awk '{if($3 > 100) print "ALERT: High security blocks detected"}'
+```
+
 ## Production Deployment
 
 ```python
