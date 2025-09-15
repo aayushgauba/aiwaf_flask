@@ -410,7 +410,8 @@ class AIWAFManager:
             print(f"❌ Error analyzing logs: {e}")
             return False
     
-    def train_model(self, log_dir: Optional[str] = None, disable_ai: bool = False, verbose: bool = False):
+    def train_model(self, log_dir: Optional[str] = None, disable_ai: bool = False, 
+                   min_ai_logs: int = 10000, force_ai: bool = False, verbose: bool = False):
         """Train AIWAF AI model from access logs."""
         try:
             from flask import Flask
@@ -421,6 +422,8 @@ class AIWAFManager:
                 print("=" * 40)
                 print(f"Log directory: {log_dir or 'aiwaf_logs'}")
                 print(f"AI training: {'disabled' if disable_ai else 'enabled'}")
+                print(f"Min AI logs threshold: {min_ai_logs}")
+                print(f"Force AI: {force_ai}")
                 print("=" * 40)
             
             # Create minimal Flask app for training
@@ -430,6 +433,8 @@ class AIWAFManager:
             app.config['AIWAF_LOG_DIR'] = log_dir or 'aiwaf_logs'
             app.config['AIWAF_DYNAMIC_TOP_N'] = 15
             app.config['AIWAF_AI_CONTAMINATION'] = 0.05
+            app.config['AIWAF_MIN_AI_LOGS'] = min_ai_logs
+            app.config['AIWAF_FORCE_AI'] = force_ai
             
             # Optional settings (can be customized)
             app.config['AIWAF_EXEMPT_PATHS'] = {'/health', '/status', '/favicon.ico'}
@@ -613,6 +618,10 @@ def main():
     train_parser.add_argument('--log-dir', help='Custom log directory path (default: aiwaf_logs)')
     train_parser.add_argument('--disable-ai', action='store_true', 
                             help='Disable AI model training (keyword learning only)')
+    train_parser.add_argument('--min-ai-logs', type=int, default=10000,
+                            help='Minimum log lines required for AI training (default: 10000)')
+    train_parser.add_argument('--force-ai', action='store_true',
+                            help='Force AI training even with insufficient log data')
     train_parser.add_argument('--verbose', '-v', action='store_true',
                             help='Enable verbose output')
     
@@ -689,7 +698,7 @@ def main():
         manager.analyze_logs(args.log_dir, log_format)
     
     elif args.command == 'train':
-        manager.train_model(args.log_dir, args.disable_ai, args.verbose)
+        manager.train_model(args.log_dir, args.disable_ai, args.min_ai_logs, args.force_ai, args.verbose)
     
     elif args.command == 'model':
         # Handle model diagnostics

@@ -8,7 +8,7 @@ and automatically blocks malicious IPs based on request characteristics.
 import re
 import time
 import logging
-from flask import request, jsonify, g
+from flask import request, jsonify, g, current_app
 from .utils import get_ip, is_exempt, is_path_exempt
 from .blacklist_manager import BlacklistManager
 
@@ -65,6 +65,10 @@ class AIAnomalyMiddleware:
         self.window_seconds = 60
         self.top_n = 10
         
+        # Periodic AI check
+        self.last_ai_check = 0
+        self.ai_check_interval = app.config.get('AIWAF_AI_CHECK_INTERVAL', 3600) if app else 3600  # Default: Check every hour
+        
         # Setup logging
         self.logger = logging.getLogger(__name__)
         
@@ -99,8 +103,86 @@ class AIAnomalyMiddleware:
         
         return str(resources_dir / 'model.pkl')
 
+    def _check_log_data_sufficiency(self, app):
+        """Check if there's enough log data to justify AI model usage."""
+        min_ai_threshold = app.config.get('AIWAF_MIN_AI_LOGS', 10000)
+        log_dir = app.config.get('AIWAF_LOG_DIR', 'aiwaf_logs')
+        
+        total_lines = 0
+        try:
+            import os
+            import glob
+            
+            # Count lines in all log files
+            log_patterns = [
+                os.path.join(log_dir, '*.log'),
+                os.path.join(log_dir, '*.csv'),
+                os.path.join(log_dir, '*.json'),
+                os.path.join(log_dir, '*.jsonl'),
+            ]
+            
+            for pattern in log_patterns:
+                for log_file in glob.glob(pattern):
+                    try:
+                        with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                            total_lines += sum(1 for _ in f)
+                    except Exception as e:
+                        self.logger.debug(f"Error reading {log_file}: {e}")
+                        continue
+            
+            self.logger.info(f"Found {total_lines} total log lines, threshold: {min_ai_threshold}")
+            return total_lines >= min_ai_threshold
+            
+        except Exception as e:
+            self.logger.warning(f"Could not check log data sufficiency: {e}")
+            return True  # Default to allowing AI if we can't check
+
+    def _check_ai_status_periodically(self, app):
+        """Periodically re-evaluate whether AI should be enabled based on current log data."""
+        import time
+        
+        current_time = time.time()
+        
+        # Only check periodically to avoid performance impact
+        if current_time - self.last_ai_check < self.ai_check_interval:
+            return
+            
+        self.last_ai_check = current_time
+        
+        # Re-evaluate log data sufficiency
+        force_ai = app.config.get('AIWAF_FORCE_AI', False)
+        
+        if force_ai:
+            # If forcing AI, ensure model is loaded if available
+            if self.model is None:
+                self.logger.info("Force AI enabled - attempting to reload model")
+                self._load_model(app)
+            return
+        
+        # Check current log data sufficiency
+        has_sufficient_data = self._check_log_data_sufficiency(app)
+        
+        if has_sufficient_data and self.model is None:
+            # We now have enough data but no model - try to load it
+            self.logger.info("Sufficient log data detected - attempting to load AI model")
+            self._load_model(app)
+        elif not has_sufficient_data and self.model is not None:
+            # We no longer have enough data - disable AI
+            self.logger.info("Insufficient log data detected - disabling AI model")
+            self.model = None
+
     def _load_model(self, app):
-        """Load the machine learning model if available."""
+        """Load the machine learning model if available and sufficient data exists."""
+        # Check if we have enough log data for AI to be effective (unless forced)
+        force_ai = app.config.get('AIWAF_FORCE_AI', False)
+        if not force_ai and not self._check_log_data_sufficiency(app):
+            self.logger.info("Insufficient log data for AI anomaly detection - using keyword-only mode")
+            self.logger.info("Use AIWAF_FORCE_AI=True to override this behavior")
+            self.model = None
+            return
+        elif force_ai:
+            self.logger.info("AI model loading forced despite potentially insufficient log data")
+        
         # Get model path - use package-relative path by default
         default_model_path = self._get_default_model_path()
         model_path = app.config.get('AIWAF_MODEL_PATH', default_model_path)
@@ -318,6 +400,9 @@ class AIAnomalyMiddleware:
 
     def before_request(self):
         """Process request before it reaches the route handler."""
+        # Periodically check if AI should be enabled/disabled
+        self._check_ai_status_periodically(current_app)
+        
         # Check if request should be exempt
         if is_exempt(request):
             return None

@@ -499,6 +499,17 @@ class FlaskAITrainer:
             print(f"⚠️  Only {len(raw_lines)} log entries found - need at least 10 for training")
             return
         
+        # Check if we have enough data for AI training
+        min_ai_threshold = current_app.config.get('AIWAF_MIN_AI_LOGS', 10000)
+        force_ai = current_app.config.get('AIWAF_FORCE_AI', False)
+        
+        if not disable_ai and not force_ai and len(raw_lines) < min_ai_threshold:
+            print(f"⚠️  Only {len(raw_lines)} log entries found - need at least {min_ai_threshold} for AI training")
+            print("   Switching to keyword-only mode (use --force-ai to override or --disable-ai to suppress this warning)")
+            disable_ai = True
+        elif not disable_ai and force_ai and len(raw_lines) < min_ai_threshold:
+            print(f"⚠️  Only {len(raw_lines)} log entries found (recommended: {min_ai_threshold}+) but forcing AI training")
+        
         parsed = []
         ip_404 = defaultdict(int)
         ip_404_login = defaultdict(int)

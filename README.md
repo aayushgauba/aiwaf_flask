@@ -451,6 +451,8 @@ The AI anomaly detection middleware:
 app.config['AIWAF_WINDOW_SECONDS'] = 60       # Analysis window (seconds)
 app.config['AIWAF_DYNAMIC_TOP_N'] = 10        # Top patterns to track  
 app.config['AIWAF_MODEL_PATH'] = 'path/to/model.pkl'  # ML model location
+app.config['AIWAF_MIN_AI_LOGS'] = 10000       # Minimum logs for AI training (NEW)
+app.config['AIWAF_FORCE_AI'] = False          # Force AI regardless of data amount (NEW)
 
 # Install AI dependencies for full functionality
 # pip install aiwaf-flask[ai]
@@ -458,6 +460,8 @@ app.config['AIWAF_MODEL_PATH'] = 'path/to/model.pkl'  # ML model location
 ```
 
 **Note**: AI anomaly detection requires NumPy and Scikit-learn. Install with `pip install aiwaf-flask[ai]` for full ML capabilities.
+
+**New in v0.1.8**: AI training automatically disables when there are fewer than 10,000 log entries to prevent poor model performance. Use `AIWAF_FORCE_AI=True` to override or adjust `AIWAF_MIN_AI_LOGS` threshold.
 
 ### Detection Criteria
 
