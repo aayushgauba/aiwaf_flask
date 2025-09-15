@@ -20,7 +20,14 @@ except ImportError:
     NUMPY_AVAILABLE = False
     np = None
 
-# Try to import pickle for model loading
+# Try to import dependencies for model loading
+try:
+    import joblib
+    JOBLIB_AVAILABLE = True
+except ImportError:
+    JOBLIB_AVAILABLE = False
+    joblib = None
+
 try:
     import pickle
     PICKLE_AVAILABLE = True
@@ -79,27 +86,97 @@ class AIAnomalyMiddleware:
         app.before_request(self.before_request)
         app.after_request(self.after_request)
 
+    def _get_default_model_path(self):
+        """Get the default model path relative to the package."""
+        from pathlib import Path
+        
+        # Get the directory where this file is located
+        middleware_dir = Path(__file__).parent
+        resources_dir = middleware_dir / 'resources'
+        
+        # Ensure resources directory exists
+        resources_dir.mkdir(exist_ok=True)
+        
+        return str(resources_dir / 'model.pkl')
+
     def _load_model(self, app):
         """Load the machine learning model if available."""
-        model_path = app.config.get('AIWAF_MODEL_PATH', 'aiwaf_flask/resources/model.pkl')
+        # Get model path - use package-relative path by default
+        default_model_path = self._get_default_model_path()
+        model_path = app.config.get('AIWAF_MODEL_PATH', default_model_path)
         
-        if PICKLE_AVAILABLE and NUMPY_AVAILABLE:
+        if JOBLIB_AVAILABLE and NUMPY_AVAILABLE:
             try:
                 import os
+                import warnings
                 if os.path.exists(model_path):
-                    with open(model_path, 'rb') as f:
-                        self.model = pickle.load(f)
-                    self.logger.info(f"Loaded AI model from {model_path}")
+                    # Try joblib first (preferred format from trainer)
+                    try:
+                        with warnings.catch_warnings():
+                            warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
+                            model_data = joblib.load(model_path)
+                            
+                            # Handle both new format (dict with metadata) and old format (direct model)
+                            if isinstance(model_data, dict) and 'model' in model_data:
+                                self.model = model_data['model']
+                                self.logger.info(f"Loaded AI model from {model_path} (with metadata, joblib)")
+                            else:
+                                self.model = model_data
+                                self.logger.info(f"Loaded AI model from {model_path} (legacy format, joblib)")
+                    
+                    except Exception as joblib_error:
+                        # Fallback to pickle if joblib fails
+                        if PICKLE_AVAILABLE:
+                            self.logger.warning(f"Joblib failed, trying pickle fallback: {joblib_error}")
+                            with warnings.catch_warnings():
+                                warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
+                                with open(model_path, 'rb') as f:
+                                    model_data = pickle.load(f)
+                                
+                                # Handle both new format (dict with metadata) and old format (direct model)
+                                if isinstance(model_data, dict) and 'model' in model_data:
+                                    self.model = model_data['model']
+                                    self.logger.info(f"Loaded AI model from {model_path} (with metadata, pickle)")
+                                else:
+                                    self.model = model_data
+                                    self.logger.info(f"Loaded AI model from {model_path} (legacy format, pickle)")
+                        else:
+                            raise joblib_error
+                            
                 else:
                     self.logger.warning(f"AI model not found at {model_path}")
             except Exception as e:
                 self.logger.error(f"Failed to load AI model: {e}")
+                self.logger.info("AI anomaly detection will continue without ML model (keyword-based only)")
                 self.model = None
         else:
+            if not JOBLIB_AVAILABLE:
+                self.logger.warning("Joblib not available - trying pickle fallback")
+                if PICKLE_AVAILABLE and NUMPY_AVAILABLE:
+                    try:
+                        import os
+                        import warnings
+                        if os.path.exists(model_path):
+                            with warnings.catch_warnings():
+                                warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
+                                with open(model_path, 'rb') as f:
+                                    model_data = pickle.load(f)
+                                
+                                if isinstance(model_data, dict) and 'model' in model_data:
+                                    self.model = model_data['model']
+                                    self.logger.info(f"Loaded AI model from {model_path} (with metadata, pickle only)")
+                                else:
+                                    self.model = model_data
+                                    self.logger.info(f"Loaded AI model from {model_path} (legacy format, pickle only)")
+                        else:
+                            self.logger.warning(f"AI model not found at {model_path}")
+                    except Exception as e:
+                        self.logger.error(f"Failed to load AI model with pickle: {e}")
+                        self.model = None
+                else:
+                    self.logger.warning("Neither joblib nor pickle available - AI anomaly detection disabled")
             if not NUMPY_AVAILABLE:
                 self.logger.warning("NumPy not available - AI anomaly detection disabled")
-            if not PICKLE_AVAILABLE:
-                self.logger.warning("Pickle not available - AI model loading disabled")
 
     def _is_malicious_context(self, request_obj, keyword):
         """
@@ -390,6 +467,7 @@ class AIAnomalyMiddleware:
         return {
             'model_loaded': self.model is not None,
             'numpy_available': NUMPY_AVAILABLE,
+            'joblib_available': JOBLIB_AVAILABLE,
             'pickle_available': PICKLE_AVAILABLE,
             'cached_ips': len(self.request_cache),
             'malicious_keywords': len(self.malicious_keywords),

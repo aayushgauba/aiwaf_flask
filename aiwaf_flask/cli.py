@@ -468,6 +468,111 @@ class AIWAFManager:
             if not disable_ai:
                 print("💡 Try with --disable-ai if AI dependencies are missing")
             return False
+    
+    def model_diagnostics(self, check: bool = False, retrain: bool = False, info: bool = False):
+        """Run model diagnostics and management."""
+        try:
+            from pathlib import Path
+            import pickle
+            import warnings
+            
+            # Use the same model path function as trainer
+            from .trainer import get_default_model_path
+            model_path = Path(get_default_model_path())
+            
+            if info or check:
+                print("🔧 AIWAF Model Diagnostics")
+                print("=" * 50)
+                print(f"📁 Model path: {model_path}")
+                print(f"📄 Model exists: {model_path.exists()}")
+                
+                if not model_path.exists():
+                    print("❌ No model found")
+                    if retrain:
+                        print("🔄 Proceeding with training...")
+                        return self.train_model(verbose=True)
+                    else:
+                        print("💡 Run 'aiwaf train' to create a model")
+                        return False
+            
+            if check or info:
+                # Try to load and check the model
+                with warnings.catch_warnings(record=True) as w:
+                    warnings.simplefilter("always")
+                    
+                    try:
+                        # Use joblib instead of pickle (matches trainer save format)
+                        import joblib
+                        model_data = joblib.load(model_path)
+                        
+                        # Check for warnings
+                        sklearn_warnings = [warning for warning in w 
+                                          if 'sklearn' in str(warning.message).lower()]
+                        
+                        if sklearn_warnings:
+                            print("⚠️  Sklearn version compatibility warnings:")
+                            for warning in sklearn_warnings:
+                                print(f"   {warning.message}")
+                            
+                            if check:
+                                print("\n💡 Model loads but may have compatibility issues")
+                                print("   Consider retraining: aiwaf model --retrain")
+                        else:
+                            print("✅ Model loads successfully without warnings")
+                        
+                        if info:
+                            # Show model information
+                            if isinstance(model_data, dict):
+                                print("\n📊 Model Information:")
+                                print(f"   Format: Enhanced (with metadata)")
+                                for key, value in model_data.items():
+                                    if key == 'model':
+                                        print(f"   Model Type: {type(value).__name__}")
+                                    else:
+                                        print(f"   {key}: {value}")
+                            else:
+                                print("\n📊 Model Information:")
+                                print(f"   Format: Legacy (direct model)")
+                                print(f"   Model Type: {type(model_data).__name__}")
+                        
+                        # Get file stats
+                        import os
+                        file_stats = os.stat(model_path)
+                        file_size = file_stats.st_size
+                        modified_time = datetime.fromtimestamp(file_stats.st_mtime)
+                        
+                        if info:
+                            print(f"\n📄 File Information:")
+                            print(f"   Size: {file_size:,} bytes")
+                            print(f"   Modified: {modified_time}")
+                            
+                            # Try to get sklearn version info
+                            try:
+                                import sklearn
+                                print(f"   Current sklearn: {sklearn.__version__}")
+                            except ImportError:
+                                print(f"   Current sklearn: Not installed")
+                        
+                        return True
+                        
+                    except Exception as e:
+                        print(f"❌ Error loading model: {e}")
+                        if retrain:
+                            print("🔄 Model appears corrupted, proceeding with retraining...")
+                            return self.train_model(verbose=True)
+                        else:
+                            print("💡 Model may be corrupted. Try: aiwaf model --retrain")
+                            return False
+            
+            if retrain:
+                print("🔄 Retraining model with current dependencies...")
+                return self.train_model(verbose=True)
+            
+            return True
+            
+        except Exception as e:
+            print(f"❌ Model diagnostics failed: {e}")
+            return False
 
 def main():
     """Main CLI interface."""
@@ -510,6 +615,15 @@ def main():
                             help='Disable AI model training (keyword learning only)')
     train_parser.add_argument('--verbose', '-v', action='store_true',
                             help='Enable verbose output')
+    
+    # Model diagnostics command
+    model_parser = subparsers.add_parser('model', help='Model diagnostics and management')
+    model_parser.add_argument('--check', action='store_true',
+                            help='Check model compatibility')
+    model_parser.add_argument('--retrain', action='store_true',
+                            help='Force retrain model with current dependencies')
+    model_parser.add_argument('--info', action='store_true',
+                            help='Show model information')
     
     # Export/Import commands
     export_parser = subparsers.add_parser('export', help='Export configuration')
@@ -576,6 +690,13 @@ def main():
     
     elif args.command == 'train':
         manager.train_model(args.log_dir, args.disable_ai, args.verbose)
+    
+    elif args.command == 'model':
+        # Handle model diagnostics
+        if not any([args.check, args.retrain, args.info]):
+            # Default to showing info if no specific action
+            args.info = True
+        manager.model_diagnostics(args.check, args.retrain, args.info)
     
     elif args.command == 'export':
         manager.export_config(args.filename)

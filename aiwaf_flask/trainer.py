@@ -41,7 +41,22 @@ from .utils import is_exempt, is_path_exempt
 
 # ─────────── Configuration ───────────
 DEFAULT_LOG_DIR = 'aiwaf_logs'
-DEFAULT_MODEL_PATH = 'aiwaf_flask/resources/model.pkl'
+
+def get_default_model_path():
+    """Get the default model path relative to the package."""
+    import os
+    from pathlib import Path
+    
+    # Get the directory where this trainer.py file is located
+    trainer_dir = Path(__file__).parent
+    resources_dir = trainer_dir / 'resources'
+    
+    # Ensure resources directory exists
+    resources_dir.mkdir(exist_ok=True)
+    
+    return str(resources_dir / 'model.pkl')
+
+DEFAULT_MODEL_PATH = get_default_model_path()
 
 STATIC_KW = [".php", "xmlrpc", "wp-", ".env", ".git", ".bak", "config", "shell", "filemanager"]
 STATUS_IDX = ["200", "403", "404", "500"]

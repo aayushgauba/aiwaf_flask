@@ -11,7 +11,7 @@ with open(os.path.join(this_directory, 'README.md'), encoding='utf-8') as f:
 
 setup(
     name="aiwaf-flask",
-    version="0.1.7-beta",
+    version="0.1.8-beta",
     author="Aayush Gauba",
     author_email="gauba.aayush@gmail.com",
     description="Advanced AI-powered Web Application Firewall for Flask with intelligent threat detection, rate limiting, IP blocking, and real-time protection against web attacks",
@@ -73,6 +73,9 @@ setup(
             'aiwaf=aiwaf_flask.cli:main',
             'aiwaf-train=train_aiwaf:main',
         ],
+    },
+    package_data={
+        'aiwaf_flask': ['resources/*', 'resources/*.pkl', 'resources/*.json'],
     },
     include_package_data=True,
     zip_safe=False,
