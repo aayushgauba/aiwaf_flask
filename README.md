@@ -1314,5 +1314,16 @@ app.config.from_object(ProductionConfig)
 | `logging` | Core only | Always available |
 | **`ai_anomaly`** | **NumPy + Scikit-learn** | **Requires AI dependencies** |
 
+## Sponsors
+
+This project is proudly supported by:
+
+<a href="https://www.digitalocean.com/">
+  <img src="https://opensource.nyc3.cdn.digitaloceanspaces.com/attribution/assets/SVG/DO_Logo_horizontal_blue.svg" width="201px">
+</a>
+
+[DigitalOcean](https://www.digitalocean.com/) provides the cloud infrastructure that powers AIWAF development.
+
+
 ## License
 MIT
