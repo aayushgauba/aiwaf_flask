@@ -25,8 +25,19 @@ def get_storage_instance():
         from pathlib import Path
         
         def _get_data_dir():
-            """Get data directory path."""
-            return os.environ.get('AIWAF_DATA_DIR', 'aiwaf_data')
+            """Get data directory path with automatic configuration."""
+            try:
+                from .auto_config import get_auto_configured_data_dir, print_auto_config_info
+                data_dir, config_info = get_auto_configured_data_dir()
+                
+                # Only print detailed info in verbose mode or if explicitly requested
+                if len(sys.argv) > 1 and '--verbose' in sys.argv:
+                    print_auto_config_info(config_info)
+                
+                return data_dir
+            except ImportError:
+                # Fallback to original logic if auto_config not available
+                return os.environ.get('AIWAF_DATA_DIR', 'aiwaf_data')
         
         def _read_csv_whitelist():
             """Read whitelist from CSV."""
@@ -148,8 +159,15 @@ class AIWAFManager:
             # Override data directory if specified
             import os
             os.environ['AIWAF_DATA_DIR'] = data_dir
-        
-        print(f"📁 Using {self.storage['mode']} storage: {self.storage['data_dir']()}")
+            print(f"📁 Using specified data directory: {data_dir}")
+        else:
+            # Use auto-configuration
+            try:
+                from .auto_config import get_auto_configured_data_dir, print_auto_config_info
+                auto_dir, config_info = get_auto_configured_data_dir()
+                print_auto_config_info(config_info)
+            except ImportError:
+                print(f"📁 Using {self.storage['mode']} storage: {self.storage['data_dir']()}")
     
     def list_whitelist(self) -> List[str]:
         """Get all whitelisted IPs."""
