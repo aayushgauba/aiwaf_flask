@@ -31,15 +31,11 @@ class AIWAFAutoConfig:
         if self._check_environment_variable():
             return self.data_dir
             
-        # Method 2: Find the installed package location and use consistent relative path
-        if self._use_package_based_data_directory():
-            return self.data_dir
-            
-        # Method 3: Search for the BEST existing data directory (most data, not first found)
+        # Method 2: Find the BEST existing data directory (most data, avoid nesting)
         if self._find_best_existing_data_directory():
             return self.data_dir
             
-        # Method 4: Create in user-specific location (consistent across sessions)
+        # Method 3: Create in user-specific location (consistent across sessions)
         return self._create_user_data_directory()
     
     def _check_environment_variable(self) -> bool:
@@ -147,14 +143,15 @@ class AIWAFAutoConfig:
             if not search_path.exists():
                 continue
                 
-            # Look for aiwaf_data directories
+            # Look for aiwaf_data directories - only direct children, not recursive
             try:
-                for item in search_path.rglob('aiwaf_data'):
-                    if item.is_dir() and self._validate_aiwaf_data_dir(item):
-                        self.data_dir = str(item.absolute())
-                        self.detected_config['method'] = 'existing_directory_search'
-                        self.detected_config['found_at'] = str(item)
-                        return True
+                # Check if there's a direct aiwaf_data subdirectory
+                aiwaf_data_path = search_path / 'aiwaf_data'
+                if aiwaf_data_path.exists() and aiwaf_data_path.is_dir() and self._validate_aiwaf_data_dir(aiwaf_data_path):
+                    self.data_dir = str(aiwaf_data_path.absolute())
+                    self.detected_config['method'] = 'existing_directory_search'
+                    self.detected_config['found_at'] = str(aiwaf_data_path)
+                    return True
             except (PermissionError, OSError):
                 continue
                 
@@ -261,10 +258,10 @@ class AIWAFAutoConfig:
             package_path = Path(aiwaf_flask.__file__).parent.parent  # Go up to site-packages level
             
             # Look for data directory near the package installation
+            # Only check direct locations, not nested to avoid aiwaf_data/aiwaf_data
             potential_locations = [
-                package_path / 'aiwaf_data',  # Next to site-packages
-                package_path.parent / 'aiwaf_data',  # One level up
-                Path.home() / '.aiwaf' / 'data',  # User-specific location
+                package_path.parent / 'aiwaf_data',  # One level up from site-packages
+                package_path / 'aiwaf_data',         # Next to site-packages
             ]
             
             for location in potential_locations:
@@ -283,33 +280,52 @@ class AIWAFAutoConfig:
         """Find the existing data directory with the most data (most reliable)."""
         candidates = []
         
-        # Search in common locations but prioritize by data content
+        # Search in FIXED, deterministic locations only (no working directory dependence)
         search_paths = [
             Path.home() / '.aiwaf' / 'data',  # User-specific (highest priority)
             Path.home() / 'aiwaf_data',       # User home
-            Path('/var/lib/aiwaf') if os.name != 'nt' else Path('C:/ProgramData/aiwaf'),  # System-wide
         ]
         
-        # Add current and parent directories but with lower priority
-        current_dir = Path.cwd()
-        for i in range(3):  # Check current and 2 parent levels
-            search_paths.append(current_dir / 'aiwaf_data')
-            if current_dir.parent != current_dir:  # Avoid infinite loop at root
-                current_dir = current_dir.parent
-            else:
-                break
+        # On Windows, add AppData location
+        if os.name == 'nt':
+            appdata = os.environ.get('APPDATA')
+            if appdata:
+                search_paths.insert(0, Path(appdata) / 'aiwaf' / 'data')
         
-        # Evaluate each candidate
+        # Add common system locations (fixed paths)
+        if os.name != 'nt':
+            search_paths.append(Path('/var/lib/aiwaf'))
+        else:
+            search_paths.append(Path('C:/ProgramData/aiwaf'))
+        
+        # Add package-related locations (deterministic based on package location)
+        try:
+            import aiwaf_flask
+            package_path = Path(aiwaf_flask.__file__).parent.parent
+            search_paths.extend([
+                package_path.parent / 'aiwaf_data',  # One level up from package
+                package_path / 'aiwaf_data',         # Next to package
+            ])
+        except Exception:
+            pass
+        
+        # Evaluate each candidate - only look at direct children, not nested
         for search_path in search_paths:
             if not search_path.exists():
                 continue
                 
             try:
-                for item in search_path.rglob('aiwaf_data'):
-                    if item.is_dir() and self._validate_aiwaf_data_dir(item):
-                        # Count the amount of data in this directory
-                        data_score = self._calculate_data_directory_score(item)
-                        candidates.append((data_score, str(item.absolute()), item))
+                # Check direct aiwaf_data directory in this path
+                direct_aiwaf_data = search_path / 'aiwaf_data'
+                if direct_aiwaf_data.exists() and direct_aiwaf_data.is_dir() and self._validate_aiwaf_data_dir(direct_aiwaf_data):
+                    data_score = self._calculate_data_directory_score(direct_aiwaf_data)
+                    candidates.append((data_score, str(direct_aiwaf_data.absolute()), direct_aiwaf_data))
+                
+                # Also check if search_path itself is an aiwaf_data directory
+                if search_path.name == 'aiwaf_data' and self._validate_aiwaf_data_dir(search_path):
+                    data_score = self._calculate_data_directory_score(search_path)
+                    candidates.append((data_score, str(search_path.absolute()), search_path))
+                    
             except (PermissionError, OSError):
                 continue
         
