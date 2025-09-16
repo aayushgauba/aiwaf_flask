@@ -365,10 +365,22 @@ class AIWAFManager:
             from .logging_middleware import analyze_access_logs
             
             if log_dir:
-                stats = analyze_access_logs(log_dir, log_format)
+                actual_log_dir = log_dir
+                print(f"📁 Using specified log directory: {actual_log_dir}")
             else:
-                # Use default log directory
-                stats = analyze_access_logs('aiwaf_logs', log_format)
+                # Use automatic log directory detection
+                try:
+                    from .auto_config import get_auto_configured_log_dir
+                    actual_log_dir, log_config_info = get_auto_configured_log_dir()
+                    print(f"📁 Auto-configured log directory: {actual_log_dir}")
+                    method = log_config_info.get('detection_method', 'unknown')
+                    print(f"🔍 Log detection method: {method}")
+                except ImportError:
+                    # Fallback to relative path
+                    actual_log_dir = 'aiwaf_logs'
+                    print(f"📁 Using default log directory: {actual_log_dir}")
+            
+            stats = analyze_access_logs(actual_log_dir, log_format)
             
             if 'error' in stats:
                 print(f"❌ {stats['error']}")
@@ -435,10 +447,26 @@ class AIWAFManager:
             from flask import Flask
             from .trainer import train_from_logs
             
+            # Determine log directory
+            if log_dir:
+                actual_log_dir = log_dir
+            else:
+                # Use automatic log directory detection
+                try:
+                    from .auto_config import get_auto_configured_log_dir
+                    actual_log_dir, log_config_info = get_auto_configured_log_dir()
+                    if verbose:
+                        method = log_config_info.get('detection_method', 'unknown')
+                        print(f"📁 Auto-configured log directory: {actual_log_dir}")
+                        print(f"🔍 Log detection method: {method}")
+                except ImportError:
+                    # Fallback to relative path
+                    actual_log_dir = 'aiwaf_logs'
+            
             if verbose:
                 print("🚀 AIWAF Flask Training Tool")
                 print("=" * 40)
-                print(f"Log directory: {log_dir or 'aiwaf_logs'}")
+                print(f"Log directory: {actual_log_dir}")
                 print(f"AI training: {'disabled' if disable_ai else 'enabled'}")
                 print(f"Min AI logs threshold: {min_ai_logs}")
                 print(f"Force AI: {force_ai}")
@@ -448,7 +476,7 @@ class AIWAFManager:
             app = Flask(__name__)
             
             # Configure AIWAF settings
-            app.config['AIWAF_LOG_DIR'] = log_dir or 'aiwaf_logs'
+            app.config['AIWAF_LOG_DIR'] = actual_log_dir
             app.config['AIWAF_DYNAMIC_TOP_N'] = 15
             app.config['AIWAF_AI_CONTAMINATION'] = 0.05
             app.config['AIWAF_MIN_AI_LOGS'] = min_ai_logs

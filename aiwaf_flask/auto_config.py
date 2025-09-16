@@ -251,6 +251,135 @@ class AIWAFAutoConfig:
             'details': self.detected_config
         }
     
+    def auto_detect_log_directory(self) -> str:
+        """
+        Automatically detect the correct log directory.
+        Uses similar deterministic approach as data directory.
+        """
+        # Initialize log detection state
+        self.log_dir = None
+        self.log_config = {}
+        
+        # Method 1: Environment variable
+        env_log_dir = os.environ.get('AIWAF_LOG_DIR')
+        if env_log_dir and Path(env_log_dir).exists():
+            self.log_dir = str(Path(env_log_dir).absolute())
+            self.log_config['method'] = 'environment_variable'
+            return self.log_dir
+            
+        # Method 2: Find existing log directories with actual log files
+        log_candidates = []
+        
+        # Search in predictable locations
+        search_locations = [
+            Path.home() / '.aiwaf' / 'logs',
+            Path.home() / 'aiwaf_logs',
+        ]
+        
+        # Add locations relative to the data directory
+        if self.data_dir:
+            data_path = Path(self.data_dir)
+            search_locations.extend([
+                data_path.parent / 'aiwaf_logs',
+                data_path / 'logs',
+            ])
+        
+        # Add locations relative to package
+        try:
+            import aiwaf_flask
+            package_path = Path(aiwaf_flask.__file__).parent.parent
+            search_locations.extend([
+                package_path.parent / 'aiwaf_logs',
+                package_path / 'aiwaf_logs',
+            ])
+        except Exception:
+            pass
+        
+        # Evaluate log directories
+        for location in search_locations:
+            if location.exists() and self._validate_log_directory(location):
+                log_score = self._calculate_log_directory_score(location)
+                log_candidates.append((log_score, str(location.absolute()), location))
+        
+        if log_candidates:
+            # Choose the directory with the most log files
+            log_candidates.sort(reverse=True)
+            best_score, best_path, best_location = log_candidates[0]
+            
+            self.log_dir = best_path
+            self.log_config['method'] = 'existing_log_directory'
+            self.log_config['found_at'] = best_path
+            self.log_config['log_score'] = best_score
+            return self.log_dir
+        
+        # Method 3: Create log directory in consistent location
+        log_locations = [
+            Path.home() / '.aiwaf' / 'logs',
+            Path.home() / 'aiwaf_logs',
+        ]
+        
+        # Prefer location near data directory if available
+        if self.data_dir:
+            data_path = Path(self.data_dir)
+            log_locations.insert(0, data_path.parent / 'aiwaf_logs')
+        
+        for location in log_locations:
+            if self._can_create_directory(location):
+                location.mkdir(parents=True, exist_ok=True)
+                self.log_dir = str(location.absolute())
+                self.log_config['method'] = 'created_log_directory'
+                self.log_config['location'] = str(location)
+                return self.log_dir
+        
+        # Fallback
+        fallback_log_dir = 'aiwaf_logs'
+        self.log_dir = str(Path(fallback_log_dir).absolute())
+        self.log_config['method'] = 'fallback_relative'
+        return self.log_dir
+    
+    def _validate_log_directory(self, path: Path) -> bool:
+        """Validate that a directory looks like a log directory."""
+        # Check for log files
+        log_patterns = ['*.log', '*.txt', 'access.log*', 'aiwaf.log*']
+        
+        for pattern in log_patterns:
+            if list(path.glob(pattern)):
+                return True
+        
+        # If directory exists and is writable, consider it valid for log creation
+        try:
+            return path.is_dir() and os.access(path, os.W_OK)
+        except (PermissionError, OSError):
+            return False
+    
+    def _calculate_log_directory_score(self, path: Path) -> int:
+        """Calculate a score for a log directory based on its contents."""
+        score = 0
+        
+        # Count log files
+        log_patterns = ['*.log', '*.txt']
+        for pattern in log_patterns:
+            log_files = list(path.glob(pattern))
+            score += len(log_files) * 10
+            
+            # Add score based on file sizes
+            for log_file in log_files:
+                try:
+                    size = log_file.stat().st_size
+                    score += min(size // 1024, 100)  # Cap size contribution
+                except (PermissionError, OSError):
+                    pass
+        
+        return score
+    
+    def get_log_config_info(self) -> Dict[str, Any]:
+        """Get information about how the log directory was detected."""
+        return {
+            'log_directory': getattr(self, 'log_dir', None),
+            'detection_method': getattr(self, 'log_config', {}).get('method', 'unknown'),
+            'details': getattr(self, 'log_config', {})
+        }
+    
     def _use_package_based_data_directory(self) -> bool:
         """Use data directory relative to the installed package location."""
         try:
@@ -407,6 +536,21 @@ class AIWAFAutoConfig:
 
 # Global instance for automatic configuration
 _auto_config = None
+
+def get_auto_configured_log_dir() -> Tuple[str, Dict[str, Any]]:
+    """
+    Get automatically configured log directory.
+    Returns (log_dir_path, config_info)
+    """
+    global _auto_config
+    if _auto_config is None:
+        _auto_config = AIWAFAutoConfig()
+    
+    log_dir = _auto_config.auto_detect_log_directory()
+    config_info = _auto_config.get_log_config_info()
+    
+    return log_dir, config_info
+
 
 def get_auto_configured_data_dir() -> Tuple[str, Dict[str, Any]]:
     """
