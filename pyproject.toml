@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aiwaf-flask"
-version = "0.2.5-beta"
+version = "0.1.0"
 description = "Advanced AI-powered Web Application Firewall for Flask with intelligent threat detection, rate limiting, IP blocking, and real-time protection against web attacks"
 readme = "README.md"
 license = {text = "MIT"}

@@ -495,8 +495,8 @@ class FlaskAITrainer:
             return
         
         # Skip processing if we have too few entries
-        if len(raw_lines) < 10:
-            print(f"⚠️  Only {len(raw_lines)} log entries found - need at least 10 for training")
+        if len(raw_lines) < 50:
+            print(f"⚠️  Only {len(raw_lines)} log entries found - need at least 50 for basic training")
             return
         
         # Check if we have enough data for AI training
@@ -531,8 +531,8 @@ class FlaskAITrainer:
         print(f"✅ Successfully parsed {len(parsed)} log entries")
         
         # Check if we have enough data
-        if len(parsed) < 10:
-            print(f"⚠️  Only {len(parsed)} valid entries parsed - need at least 10 for training")
+        if len(parsed) < 50:
+            print(f"⚠️  Only {len(parsed)} valid entries parsed - need at least 50 for basic training")
             return
         
         # 404 flood blocking (only for non-login paths)
