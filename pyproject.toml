@@ -59,10 +59,10 @@ all = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/aayushgauba/aiwaf-flask"
-Repository = "https://github.com/aayushgauba/aiwaf-flask.git"
-Documentation = "https://github.com/aayushgauba/aiwaf-flask#readme"
-"Bug Tracker" = "https://github.com/aayushgauba/aiwaf-flask/issues"
+Homepage = "https://github.com/aayushgauba/aiwaf_flask"
+Repository = "https://github.com/aayushgauba/aiwaf_flask.git"
+Documentation = "https://github.com/aayushgauba/aiwaf_flask#readme"
+"Bug Tracker" = "https://github.com/aayushgauba/aiwaf_flask/issues"
 
 [project.scripts]
 aiwaf-console = "aiwaf_flask.cli:main"
