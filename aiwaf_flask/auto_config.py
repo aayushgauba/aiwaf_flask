@@ -270,18 +270,20 @@ class AIWAFAutoConfig:
         # Method 2: Find existing log directories with actual log files
         log_candidates = []
         
-        # Search in predictable locations
+        # Search in predictable locations (prefer 'logs' over 'aiwaf_logs')
         search_locations = [
             Path.home() / '.aiwaf' / 'logs',
-            Path.home() / 'aiwaf_logs',
+            Path.home() / 'logs',
+            Path.home() / 'aiwaf_logs',  # legacy support
         ]
         
         # Add locations relative to the data directory
         if self.data_dir:
             data_path = Path(self.data_dir)
             search_locations.extend([
-                data_path.parent / 'aiwaf_logs',
+                data_path.parent / 'logs',
                 data_path / 'logs',
+                data_path.parent / 'aiwaf_logs',  # legacy support
             ])
         
         # Add locations relative to package
@@ -289,8 +291,10 @@ class AIWAFAutoConfig:
             import aiwaf_flask
             package_path = Path(aiwaf_flask.__file__).parent.parent
             search_locations.extend([
-                package_path.parent / 'aiwaf_logs',
-                package_path / 'aiwaf_logs',
+                package_path.parent / 'logs',
+                package_path / 'logs',
+                package_path.parent / 'aiwaf_logs',  # legacy support
+                package_path / 'aiwaf_logs',  # legacy support
             ])
         except Exception:
             pass
@@ -312,16 +316,17 @@ class AIWAFAutoConfig:
             self.log_config['log_score'] = best_score
             return self.log_dir
         
-        # Method 3: Create log directory in consistent location
+        # Method 3: Create log directory in consistent location (prefer 'logs')
         log_locations = [
             Path.home() / '.aiwaf' / 'logs',
-            Path.home() / 'aiwaf_logs',
+            Path.home() / 'logs',
+            Path.home() / 'aiwaf_logs',  # legacy fallback
         ]
         
         # Prefer location near data directory if available
         if self.data_dir:
             data_path = Path(self.data_dir)
-            log_locations.insert(0, data_path.parent / 'aiwaf_logs')
+            log_locations.insert(0, data_path.parent / 'logs')
         
         for location in log_locations:
             if self._can_create_directory(location):
@@ -331,8 +336,8 @@ class AIWAFAutoConfig:
                 self.log_config['location'] = str(location)
                 return self.log_dir
         
-        # Fallback
-        fallback_log_dir = 'aiwaf_logs'
+        # Fallback to standard 'logs' directory
+        fallback_log_dir = 'logs'
         self.log_dir = str(Path(fallback_log_dir).absolute())
         self.log_config['method'] = 'fallback_relative'
         return self.log_dir
@@ -355,6 +360,13 @@ class AIWAFAutoConfig:
     def _calculate_log_directory_score(self, path: Path) -> int:
         """Calculate a score for a log directory based on its contents."""
         score = 0
+        
+        # Bonus for preferred directory names (prefer 'logs' over 'aiwaf_logs')
+        dir_name = path.name.lower()
+        if dir_name == 'logs':
+            score += 50  # Strong preference for standard 'logs' directory
+        elif 'logs' in dir_name:
+            score += 20  # Moderate preference for directories containing 'logs'
         
         # Count log files
         log_patterns = ['*.log', '*.txt']

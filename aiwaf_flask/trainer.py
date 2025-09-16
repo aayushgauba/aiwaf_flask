@@ -40,7 +40,7 @@ from .blacklist_manager import BlacklistManager
 from .utils import is_exempt, is_path_exempt
 
 # ─────────── Configuration ───────────
-DEFAULT_LOG_DIR = 'aiwaf_logs'
+DEFAULT_LOG_DIR = 'logs'
 
 def get_default_model_path():
     """Get the default model path relative to the package."""

@@ -107,7 +107,7 @@ class AIAnomalyMiddleware:
     def _check_log_data_sufficiency(self, app):
         """Check if there's enough log data to justify AI model usage."""
         min_ai_threshold = app.config.get('AIWAF_MIN_AI_LOGS', 10000)
-        log_dir = app.config.get('AIWAF_LOG_DIR', 'aiwaf_logs')
+        log_dir = app.config.get('AIWAF_LOG_DIR', 'logs')
         
         total_lines = 0
         try:

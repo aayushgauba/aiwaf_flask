@@ -115,7 +115,7 @@ class AIWAF:
             'AIWAF_MIN_FORM_TIME': 1.0,
             'AIWAF_USE_CSV': True,
             'AIWAF_DATA_DIR': 'aiwaf_data',
-            'AIWAF_LOG_DIR': 'aiwaf_logs',
+            'AIWAF_LOG_DIR': 'logs',
             'AIWAF_ENABLE_LOGGING': True,
             'AIWAF_WINDOW_SECONDS': 60,
             'AIWAF_DYNAMIC_TOP_N': 10,

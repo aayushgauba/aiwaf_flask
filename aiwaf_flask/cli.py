@@ -377,7 +377,7 @@ class AIWAFManager:
                     print(f"🔍 Log detection method: {method}")
                 except ImportError:
                     # Fallback to relative path
-                    actual_log_dir = 'aiwaf_logs'
+                    actual_log_dir = 'logs'
                     print(f"📁 Using default log directory: {actual_log_dir}")
             
             stats = analyze_access_logs(actual_log_dir, log_format)
@@ -461,7 +461,7 @@ class AIWAFManager:
                         print(f"🔍 Log detection method: {method}")
                 except ImportError:
                     # Fallback to relative path
-                    actual_log_dir = 'aiwaf_logs'
+                    actual_log_dir = 'logs'
             
             if verbose:
                 print("🚀 AIWAF Flask Training Tool")
@@ -661,7 +661,7 @@ def main():
     
     # Train command
     train_parser = subparsers.add_parser('train', help='Train AI model from logs')
-    train_parser.add_argument('--log-dir', help='Custom log directory path (default: aiwaf_logs)')
+    train_parser.add_argument('--log-dir', help='Custom log directory path (default: logs)')
     train_parser.add_argument('--disable-ai', action='store_true', 
                             help='Disable AI model training (keyword learning only)')
     train_parser.add_argument('--min-ai-logs', type=int, default=10000,
