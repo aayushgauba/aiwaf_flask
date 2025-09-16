@@ -24,26 +24,23 @@ class AIWAFAutoConfig:
     def auto_detect_data_directory(self) -> str:
         """
         Automatically detect the correct data directory through multiple methods.
+        Uses deterministic approach to always return the same directory regardless of working directory.
         Returns the absolute path to the data directory.
         """
-        # Method 1: Environment variable (highest priority)
+        # Method 1: Environment variable (highest priority - always consistent)
         if self._check_environment_variable():
             return self.data_dir
             
-        # Method 2: Search for existing aiwaf_data directories (most reliable)
-        if self._search_existing_data_directories():
+        # Method 2: Find the installed package location and use consistent relative path
+        if self._use_package_based_data_directory():
             return self.data_dir
             
-        # Method 3: Intelligent project structure detection
-        if self._detect_project_structure():
+        # Method 3: Search for the BEST existing data directory (most data, not first found)
+        if self._find_best_existing_data_directory():
             return self.data_dir
             
-        # Method 4: Find and read Flask app configuration (complex, less reliable)
-        if self._find_flask_app_config():
-            return self.data_dir
-            
-        # Fallback: Create in most logical location
-        return self._create_fallback_directory()
+        # Method 4: Create in user-specific location (consistent across sessions)
+        return self._create_user_data_directory()
     
     def _check_environment_variable(self) -> bool:
         """Check if AIWAF_DATA_DIR is set in environment."""
@@ -256,6 +253,140 @@ class AIWAFAutoConfig:
             'detection_method': self.detected_config.get('method', 'unknown'),
             'details': self.detected_config
         }
+    
+    def _use_package_based_data_directory(self) -> bool:
+        """Use data directory relative to the installed package location."""
+        try:
+            import aiwaf_flask
+            package_path = Path(aiwaf_flask.__file__).parent.parent  # Go up to site-packages level
+            
+            # Look for data directory near the package installation
+            potential_locations = [
+                package_path / 'aiwaf_data',  # Next to site-packages
+                package_path.parent / 'aiwaf_data',  # One level up
+                Path.home() / '.aiwaf' / 'data',  # User-specific location
+            ]
+            
+            for location in potential_locations:
+                if location.exists() and self._validate_aiwaf_data_dir(location):
+                    self.data_dir = str(location.absolute())
+                    self.detected_config['method'] = 'package_based_location'
+                    self.detected_config['package_path'] = str(package_path)
+                    return True
+                    
+        except Exception:
+            pass
+            
+        return False
+    
+    def _find_best_existing_data_directory(self) -> bool:
+        """Find the existing data directory with the most data (most reliable)."""
+        candidates = []
+        
+        # Search in common locations but prioritize by data content
+        search_paths = [
+            Path.home() / '.aiwaf' / 'data',  # User-specific (highest priority)
+            Path.home() / 'aiwaf_data',       # User home
+            Path('/var/lib/aiwaf') if os.name != 'nt' else Path('C:/ProgramData/aiwaf'),  # System-wide
+        ]
+        
+        # Add current and parent directories but with lower priority
+        current_dir = Path.cwd()
+        for i in range(3):  # Check current and 2 parent levels
+            search_paths.append(current_dir / 'aiwaf_data')
+            if current_dir.parent != current_dir:  # Avoid infinite loop at root
+                current_dir = current_dir.parent
+            else:
+                break
+        
+        # Evaluate each candidate
+        for search_path in search_paths:
+            if not search_path.exists():
+                continue
+                
+            try:
+                for item in search_path.rglob('aiwaf_data'):
+                    if item.is_dir() and self._validate_aiwaf_data_dir(item):
+                        # Count the amount of data in this directory
+                        data_score = self._calculate_data_directory_score(item)
+                        candidates.append((data_score, str(item.absolute()), item))
+            except (PermissionError, OSError):
+                continue
+        
+        # Choose the candidate with the highest data score
+        if candidates:
+            candidates.sort(reverse=True)  # Sort by score (descending)
+            best_score, best_path, best_item = candidates[0]
+            
+            self.data_dir = best_path
+            self.detected_config['method'] = 'best_existing_directory'
+            self.detected_config['found_at'] = best_path
+            self.detected_config['data_score'] = best_score
+            self.detected_config['total_candidates'] = len(candidates)
+            return True
+                
+        return False
+    
+    def _calculate_data_directory_score(self, path: Path) -> int:
+        """Calculate a score for a data directory based on its contents."""
+        score = 0
+        csv_files = ['whitelist.csv', 'blacklist.csv', 'keywords.csv']
+        
+        for csv_file in csv_files:
+            csv_path = path / csv_file
+            if csv_path.exists():
+                try:
+                    # Score based on file size and line count
+                    file_size = csv_path.stat().st_size
+                    score += min(file_size, 1000)  # Cap size contribution
+                    
+                    # Count lines (more data = higher score)
+                    with open(csv_path, 'r') as f:
+                        line_count = sum(1 for _ in f)
+                        score += line_count * 10  # Lines are worth more than just file size
+                        
+                except (PermissionError, OSError):
+                    pass
+        
+        # Bonus for having all three files
+        existing_files = sum(1 for csv_file in csv_files if (path / csv_file).exists())
+        score += existing_files * 100
+        
+        return score
+    
+    def _create_user_data_directory(self) -> str:
+        """Create data directory in user-specific location for consistency."""
+        # User-specific data directory (always consistent regardless of working directory)
+        user_data_locations = [
+            Path.home() / '.aiwaf' / 'data',     # Unix-style hidden directory
+            Path.home() / 'aiwaf_data',          # Simple user directory
+        ]
+        
+        # On Windows, also try AppData
+        if os.name == 'nt':
+            appdata = os.environ.get('APPDATA')
+            if appdata:
+                user_data_locations.insert(0, Path(appdata) / 'aiwaf' / 'data')
+        
+        for location in user_data_locations:
+            if self._can_create_directory(location):
+                location.mkdir(parents=True, exist_ok=True)
+                self.data_dir = str(location.absolute())
+                self.detected_config['method'] = 'user_data_directory'
+                self.detected_config['location'] = str(location)
+                return self.data_dir
+        
+        # Absolute last resort - use temp directory with user-specific name
+        import tempfile
+        try:
+            temp_dir = Path(tempfile.gettempdir()) / f'aiwaf_data_{os.getlogin()}'
+        except:
+            temp_dir = Path(tempfile.gettempdir()) / 'aiwaf_data_default'
+        temp_dir.mkdir(exist_ok=True)
+        self.data_dir = str(temp_dir.absolute())
+        self.detected_config['method'] = 'temp_user_directory'
+        self.detected_config['location'] = str(temp_dir)
+        return self.data_dir
 
 
 # Global instance for automatic configuration
@@ -283,6 +414,11 @@ def print_auto_config_info(config_info: Dict[str, Any]) -> None:
     
     method_descriptions = {
         'environment_variable': 'Found AIWAF_DATA_DIR environment variable',
+        'package_based_location': 'Located data directory near package installation',
+        'best_existing_directory': 'Selected data directory with most existing data',
+        'user_data_directory': 'Created in user-specific location for consistency',
+        'temp_user_directory': 'Using temporary user-specific directory',
+        # Legacy methods (still supported)
         'flask_app_config': 'Detected from Flask app configuration',
         'existing_directory_search': 'Found existing aiwaf_data directory',
         'project_structure_detection': 'Detected from project structure',
@@ -302,3 +438,11 @@ def print_auto_config_info(config_info: Dict[str, Any]) -> None:
         print(f"📂 Project root: {details['project_root']}")
     elif method == 'existing_directory_search' and 'found_at' in details:
         print(f"📍 Found at: {details['found_at']}")
+    elif method == 'best_existing_directory':
+        print(f"📍 Selected from {details.get('total_candidates', 0)} candidates")
+        print(f"📊 Data score: {details.get('data_score', 0)}")
+    elif method == 'package_based_location' and 'package_path' in details:
+        print(f"📦 Package location: {details['package_path']}")
+    elif method in ['user_data_directory', 'temp_user_directory'] and 'location' in details:
+        print(f"📂 Created at: {details['location']}")
+        print(f"💡 This location is consistent regardless of working directory")
