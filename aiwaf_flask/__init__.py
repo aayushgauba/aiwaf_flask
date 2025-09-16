@@ -9,6 +9,16 @@ from .anomaly_middleware import AIAnomalyMiddleware
 from .uuid_tamper_middleware import UUIDTamperMiddleware
 from .logging_middleware import AIWAFLoggingMiddleware, analyze_access_logs
 
+# Exemption decorators for fine-grained control
+from .exemption_decorators import (
+    aiwaf_exempt,
+    aiwaf_exempt_from, 
+    aiwaf_only,
+    aiwaf_require_protection,
+    is_request_exempt,
+    should_apply_middleware
+)
+
 # Backward compatibility alias
 register_aiwaf_protection = register_aiwaf_middlewares
 

@@ -3,6 +3,7 @@ import time
 from flask import request, jsonify, current_app
 from .utils import get_ip, is_exempt
 from .blacklist_manager import BlacklistManager
+from .exemption_decorators import should_apply_middleware
 
 _aiwaf_cache = {}
 
@@ -15,7 +16,11 @@ class RateLimitMiddleware:
     def init_app(self, app):
         @app.before_request
         def before_request():
-            # Check if request should be exempt from rate limiting
+            # Check exemption status first - skip if exempt from rate limiting
+            if not should_apply_middleware('rate_limit'):
+                return None  # Allow request to proceed without rate limiting
+            
+            # Legacy exemption check for backward compatibility
             if is_exempt(request):
                 return None  # Allow request to proceed
             

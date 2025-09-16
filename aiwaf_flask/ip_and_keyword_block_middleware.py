@@ -4,6 +4,7 @@ from flask import request, jsonify
 from .utils import get_ip, is_exempt
 from .blacklist_manager import BlacklistManager
 from .storage import get_keyword_store
+from .exemption_decorators import should_apply_middleware
 
 class IPAndKeywordBlockMiddleware:
     def __init__(self, app=None):
@@ -14,7 +15,11 @@ class IPAndKeywordBlockMiddleware:
     def init_app(self, app):
         @app.before_request
         def before_request():
-            # Check if request should be exempt from AIWAF protection
+            # Check exemption status first - skip if exempt from this middleware
+            if not should_apply_middleware('ip_keyword_block'):
+                return None  # Allow request to proceed without IP/keyword checking
+            
+            # Legacy exemption check for backward compatibility
             if is_exempt(request):
                 return None  # Allow request to proceed
             

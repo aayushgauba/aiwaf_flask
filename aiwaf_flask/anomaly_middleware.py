@@ -11,6 +11,7 @@ import logging
 from flask import request, jsonify, g, current_app
 from .utils import get_ip, is_exempt, is_path_exempt
 from .blacklist_manager import BlacklistManager
+from .exemption_decorators import should_apply_middleware
 
 # Try to import numpy and ML dependencies
 try:
@@ -400,10 +401,14 @@ class AIAnomalyMiddleware:
 
     def before_request(self):
         """Process request before it reaches the route handler."""
+        # Check exemption status first - skip if exempt from AI anomaly detection
+        if not should_apply_middleware('ai_anomaly'):
+            return None  # Allow request to proceed without AI anomaly checking
+        
         # Periodically check if AI should be enabled/disabled
         self._check_ai_status_periodically(current_app)
         
-        # Check if request should be exempt
+        # Legacy exemption check for backward compatibility
         if is_exempt(request):
             return None
             

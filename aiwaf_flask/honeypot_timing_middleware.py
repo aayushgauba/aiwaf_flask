@@ -3,6 +3,7 @@ import time
 from flask import request, jsonify, current_app
 from .utils import get_ip
 from .blacklist_manager import BlacklistManager
+from .exemption_decorators import should_apply_middleware
 
 _aiwaf_cache = {}
 
@@ -15,6 +16,10 @@ class HoneypotTimingMiddleware:
     def init_app(self, app):
         @app.before_request
         def before_request():
+            # Check exemption status first - skip if exempt from honeypot detection
+            if not should_apply_middleware('honeypot'):
+                return None  # Allow request to proceed without honeypot timing checks
+            
             ip = get_ip()
             now = time.time()
             if request.method == "POST":

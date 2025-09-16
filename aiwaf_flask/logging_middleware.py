@@ -10,6 +10,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 from flask import request, g
+from .exemption_decorators import should_apply_middleware
 import time
 
 
@@ -47,6 +48,10 @@ class AIWAFLoggingMiddleware:
     
     def before_request(self):
         """Record request start time."""
+        # Check exemption status first - skip logging if exempt
+        if not should_apply_middleware('logging'):
+            return None  # Skip logging for this request
+        
         g.aiwaf_start_time = time.time()
         g.aiwaf_blocked = False
         g.aiwaf_block_reason = None

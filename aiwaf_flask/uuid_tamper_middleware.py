@@ -2,6 +2,7 @@
 from flask import request, jsonify
 from .utils import get_ip
 from .blacklist_manager import BlacklistManager
+from .exemption_decorators import should_apply_middleware
 import re
 
 class UUIDTamperMiddleware:
@@ -13,6 +14,10 @@ class UUIDTamperMiddleware:
     def init_app(self, app):
         @app.before_request
         def before_request():
+            # Check exemption status first - skip if exempt from UUID tampering detection
+            if not should_apply_middleware('uuid_tamper'):
+                return None  # Allow request to proceed without UUID checking
+            
             ip = get_ip()
             uuid_val = request.args.get("uuid")
             if uuid_val and not re.match(r"^[a-f0-9\-]{36}$", uuid_val):

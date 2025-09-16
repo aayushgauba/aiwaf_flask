@@ -25,7 +25,7 @@ def is_exempt(request):
         try:
             from flask import current_app
             endpoint_func = current_app.view_functions.get(request.endpoint)
-            if endpoint_func and hasattr(endpoint_func, '_aiwaf_exempt'):
+            if endpoint_func and getattr(endpoint_func, '_aiwaf_exempt', False):
                 return True
         except:
             pass

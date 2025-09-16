@@ -9,6 +9,7 @@ AIWAF (AI Web Application Firewall) for Flask provides advanced, self-learning p
 - Header validation
 - **AI-powered anomaly detection** - Machine learning to detect suspicious patterns
 - UUID tampering detection
+- **Route-level exemption decorators** - Fine-grained control over middleware protection
 - **Path exemptions** - Prevent false positives for legitimate resources
 - **Flexible storage**: Database, CSV files, or in-memory
 - Zero-dependency protection (works without database)
@@ -76,6 +77,14 @@ aiwaf = AIWAF(app)  # ← Automatically enables ALL 7 middlewares
 @app.route('/')
 def home():
     return 'Hello, AIWAF!'
+
+# Optional: Use exemption decorators for fine-grained control
+from aiwaf_flask import aiwaf_exempt
+
+@app.route('/health')
+@aiwaf_exempt  # Bypass all protection for health checks
+def health():
+    return {'status': 'ok'}
 
 if __name__ == '__main__':
     app.run(debug=True)
@@ -167,6 +176,129 @@ rate_limiter = aiwaf.get_middleware_instance('rate_limit')
 available = AIWAF.list_available_middlewares()
 print(f"Available: {available}")
 ```
+
+## Route-Level Exemption Decorators
+
+AIWAF Flask provides powerful decorators for fine-grained control over which middlewares apply to specific routes. This allows you to create precise security policies that balance protection with functionality.
+
+### Complete Exemption
+
+Use `@aiwaf_exempt` to completely bypass ALL AIWAF protection for a route:
+
+```python
+from aiwaf_flask import aiwaf_exempt
+
+@app.route('/health')
+@aiwaf_exempt
+def health_check():
+    """Health check endpoint - no security needed"""
+    return {'status': 'ok'}
+
+@app.route('/metrics')
+@aiwaf_exempt
+def metrics():
+    """Metrics endpoint for monitoring systems"""
+    return "# Prometheus metrics\napp_requests_total 1234\n"
+```
+
+### Selective Exemption
+
+Use `@aiwaf_exempt_from()` to exempt from specific middlewares while keeping others:
+
+```python
+from aiwaf_flask import aiwaf_exempt_from
+
+@app.route('/api/webhook')
+@aiwaf_exempt_from('rate_limit', 'ai_anomaly')
+def github_webhook():
+    """Webhook endpoint - bypasses rate limiting and AI detection"""
+    return {'received': True}
+
+@app.route('/api/upload')
+@aiwaf_exempt_from('ai_anomaly', 'honeypot')
+def file_upload():
+    """File upload - large files may trigger false positives"""
+    return {'uploaded': True}
+```
+
+### Apply Only Specific Middlewares
+
+Use `@aiwaf_only()` to apply ONLY specific middlewares:
+
+```python
+from aiwaf_flask import aiwaf_only
+
+@app.route('/api/public')
+@aiwaf_only('rate_limit')
+def public_api():
+    """Public API - only needs rate limiting"""
+    return {'data': get_public_data()}
+
+@app.route('/api/sensitive')
+@aiwaf_only('ip_keyword_block', 'rate_limit', 'ai_anomaly')
+def sensitive_api():
+    """High-security endpoint with critical protection only"""
+    return {'sensitive_data': get_sensitive_data()}
+```
+
+### Force Required Protection
+
+Use `@aiwaf_require_protection()` to force specific middlewares even if exempted elsewhere:
+
+```python
+from aiwaf_flask import aiwaf_require_protection
+
+@app.route('/admin/critical')
+@aiwaf_exempt_from('rate_limit')  # Try to exempt rate limiting
+@aiwaf_require_protection('rate_limit', 'ai_anomaly')  # But force it anyway
+def critical_admin():
+    """Critical admin function - always needs full protection"""
+    return {'status': 'executed'}
+```
+
+### Available Middleware Names
+
+When using exemption decorators, these are the middleware names you can specify:
+
+- `'ip_keyword_block'` - IP blocking and keyword detection
+- `'rate_limit'` - Rate limiting protection
+- `'honeypot'` - Honeypot timing detection
+- `'header_validation'` - HTTP header validation
+- `'ai_anomaly'` - AI-based anomaly detection
+- `'uuid_tamper'` - UUID tampering protection
+- `'logging'` - Security event logging
+
+### Practical Examples
+
+```python
+from flask import Flask
+from aiwaf_flask import AIWAF, aiwaf_exempt, aiwaf_exempt_from, aiwaf_only
+
+app = Flask(__name__)
+aiwaf = AIWAF(app)
+
+# Monitoring endpoints (no protection needed)
+@app.route('/health')
+@aiwaf_exempt
+def health(): return {'status': 'healthy'}
+
+# Webhook endpoints (selective protection)
+@app.route('/webhooks/github')
+@aiwaf_exempt_from('rate_limit', 'honeypot')
+def github_webhook(): return {'received': True}
+
+# Public API (minimal protection)
+@app.route('/api/public/data')
+@aiwaf_only('rate_limit')
+def public_data(): return {'data': 'public'}
+
+# Admin endpoints (always protected)
+@app.route('/admin/users')
+@aiwaf_require_protection('ip_keyword_block', 'rate_limit', 'ai_anomaly')
+def admin_users(): return {'users': get_users()}
+```
+
+For comprehensive documentation and advanced use cases, see [EXEMPTION_DECORATORS_GUIDE.md](EXEMPTION_DECORATORS_GUIDE.md).
 
 ## Legacy Compatibility
 
@@ -453,6 +585,7 @@ app.config['AIWAF_DYNAMIC_TOP_N'] = 10        # Top patterns to track
 app.config['AIWAF_MODEL_PATH'] = 'path/to/model.pkl'  # ML model location
 app.config['AIWAF_MIN_AI_LOGS'] = 10000       # Minimum logs for AI training (NEW)
 app.config['AIWAF_FORCE_AI'] = False          # Force AI regardless of data amount (NEW)
+app.config['AIWAF_AI_CHECK_INTERVAL'] = 3600  # AI status re-evaluation interval (NEW)
 
 # Install AI dependencies for full functionality
 # pip install aiwaf-flask[ai]
@@ -461,7 +594,11 @@ app.config['AIWAF_FORCE_AI'] = False          # Force AI regardless of data amou
 
 **Note**: AI anomaly detection requires NumPy and Scikit-learn. Install with `pip install aiwaf-flask[ai]` for full ML capabilities.
 
-**New in v0.1.8**: AI training automatically disables when there are fewer than 10,000 log entries to prevent poor model performance. Use `AIWAF_FORCE_AI=True` to override or adjust `AIWAF_MIN_AI_LOGS` threshold.
+**New in v0.1.8**: 
+- AI training automatically disables when there are fewer than 10,000 log entries to prevent poor model performance
+- Middleware dynamically re-evaluates AI status during runtime based on current log data
+- Use `AIWAF_FORCE_AI=True` to override or adjust `AIWAF_MIN_AI_LOGS` threshold
+- **Route-level exemption decorators** - `@aiwaf_exempt`, `@aiwaf_exempt_from()`, `@aiwaf_only()`, and `@aiwaf_require_protection()` for fine-grained middleware control
 
 ### Detection Criteria
 
