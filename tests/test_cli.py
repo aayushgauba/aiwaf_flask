@@ -51,20 +51,35 @@ def test_cli_functionality():
             keywords = manager.list_keywords()
             assert "test-attack" in keywords, "Keyword not found in list"
             print(f"✅ Keywords: {keywords}")
+
+            # Test geo blocked countries
+            print("\n4️⃣ Testing geo blocked countries...")
+            result = manager.add_geo_blocked_country("us")
+            assert result, "Failed to add geo blocked country"
+            
+            countries = manager.list_geo_blocked_countries()
+            assert "US" in countries, "Country not found in geo blocked list"
+            print(f"✅ Geo blocked countries: {countries}")
+            
+            result = manager.remove_geo_blocked_country("US")
+            assert result, "Failed to remove geo blocked country"
+            
+            countries_after = manager.list_geo_blocked_countries()
+            assert "US" not in countries_after, "Country still in geo blocked list after removal"
             
             # Test statistics
-            print("\n4️⃣ Testing statistics...")
+            print("\n5️⃣ Testing statistics...")
             manager.show_stats()
             
             # Test export/import
-            print("\n5️⃣ Testing export/import...")
+            print("\n6️⃣ Testing export/import...")
             export_file = os.path.join(temp_dir, "test_export.json")
             result = manager.export_config(export_file)
             assert result, "Failed to export configuration"
             assert os.path.exists(export_file), "Export file not created"
             
             # Test removal
-            print("\n6️⃣ Testing removal operations...")
+            print("\n7️⃣ Testing removal operations...")
             result = manager.remove_from_whitelist("192.168.1.100")
             assert result, "Failed to remove IP from whitelist"
             
@@ -98,6 +113,70 @@ def test_console_script():
     except Exception as e:
         print(f"❌ Console script test failed: {e}")
         return False
+
+
+def test_cli_geo_command(monkeypatch, tmp_path):
+    """Test CLI geo blocked countries command."""
+    from aiwaf_flask.cli import main
+
+    monkeypatch.setenv("AIWAF_DATA_DIR", str(tmp_path))
+
+    monkeypatch.setattr(sys, "argv", ["aiwaf_console.py", "geo", "list"])
+    main()
+
+    monkeypatch.setattr(sys, "argv", ["aiwaf_console.py", "geo", "add", "US"])
+    main()
+
+    monkeypatch.setattr(sys, "argv", ["aiwaf_console.py", "geo", "list"])
+    main()
+
+    monkeypatch.setattr(sys, "argv", ["aiwaf_console.py", "geo", "remove", "US"])
+    main()
+
+
+def test_cli_geoip_summary(monkeypatch, tmp_path, capsys):
+    from aiwaf_flask.cli import AIWAFManager
+    from aiwaf_flask import trainer as trainer_mod
+    import aiwaf_flask.geoip as geoip_mod
+
+    manager = AIWAFManager(str(tmp_path))
+
+    monkeypatch.setattr(trainer_mod._trainer, "_read_all_logs", lambda: ["line1", "line2"])
+    monkeypatch.setattr(
+        trainer_mod._trainer,
+        "_parse",
+        lambda line: {"ip": "1.1.1.1"} if line == "line1" else {"ip": "2.2.2.2"},
+    )
+    monkeypatch.setattr(
+        geoip_mod,
+        "lookup_country_name",
+        lambda ip, **kwargs: "United States" if ip == "1.1.1.1" else None,
+    )
+
+    manager.geoip_traffic_summary(log_dir=str(tmp_path), top=10, limit=0)
+
+    out = capsys.readouterr().out
+    assert "GeoIP traffic summary" in out
+    assert "United States: 1" in out
+    assert "UNKNOWN: 1" in out
+
+
+def test_cli_exempt_path_command(monkeypatch, tmp_path):
+    from aiwaf_flask.cli import main
+
+    monkeypatch.setenv("AIWAF_DATA_DIR", str(tmp_path))
+
+    monkeypatch.setattr(sys, "argv", ["aiwaf_console.py", "exempt-path", "list"])
+    main()
+
+    monkeypatch.setattr(sys, "argv", ["aiwaf_console.py", "exempt-path", "add", "/health", "--reason", "Health check"])
+    main()
+
+    monkeypatch.setattr(sys, "argv", ["aiwaf_console.py", "exempt-path", "list"])
+    main()
+
+    monkeypatch.setattr(sys, "argv", ["aiwaf_console.py", "exempt-path", "remove", "/health"])
+    main()
 
 if __name__ == '__main__':
     print("🚀 AIWAF CLI Test Suite")

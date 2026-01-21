@@ -4,7 +4,7 @@ AIWAF Flask Exemption Decorators
 Provides decorators for exempting routes from AIWAF protection with fine-grained control.
 """
 from functools import wraps
-from flask import request, g
+from flask import request, g, current_app
 
 
 def aiwaf_exempt(func):
@@ -59,6 +59,7 @@ def aiwaf_exempt_from(*middleware_names):
     - 'rate_limit': Rate limiting protection
     - 'honeypot': Honeypot detection
     - 'header_validation': HTTP header validation
+    - 'geo_block': Geo-blocking by country
     - 'ai_anomaly': AI-based anomaly detection
     - 'uuid_tamper': UUID tampering protection
     - 'logging': Security event logging
@@ -105,6 +106,7 @@ def aiwaf_only(*middleware_names):
     - 'rate_limit': Rate limiting protection
     - 'honeypot': Honeypot detection
     - 'header_validation': HTTP header validation
+    - 'geo_block': Geo-blocking by country
     - 'ai_anomaly': AI-based anomaly detection
     - 'uuid_tamper': UUID tampering protection
     - 'logging': Security event logging
@@ -121,8 +123,9 @@ def aiwaf_only(*middleware_names):
     def decorator(func):
         # Get all available middleware names
         all_middlewares = {
-            'ip_keyword_block', 'rate_limit', 'honeypot', 
-            'header_validation', 'ai_anomaly', 'uuid_tamper', 'logging'
+            'ip_keyword_block', 'rate_limit', 'honeypot',
+            'header_validation', 'geo_block', 'ai_anomaly',
+            'uuid_tamper', 'logging'
         }
         
         # Exempt from all middlewares except the specified ones
@@ -218,11 +221,13 @@ def aiwaf_require_protection(*middleware_names):
     Note: This decorator forces middlewares to run even if exempted elsewhere.
     """
     def decorator(func):
+        func._aiwaf_required_middlewares = set(middleware_names)
         @wraps(func)
         def wrapper(*args, **kwargs):
             # Store required middlewares that cannot be exempted
             g.aiwaf_required_middlewares = set(middleware_names)
             return func(*args, **kwargs)
+        wrapper._aiwaf_required_middlewares = set(middleware_names)
         return wrapper
     return decorator
 
@@ -258,9 +263,16 @@ def should_apply_middleware(middleware_name):
         3. If middleware is in exemption list, don't apply (unless required)
         4. Otherwise, apply middleware
     """
-    # Check if middleware is explicitly required
+    # Check if middleware is explicitly required (route or runtime)
+    route_required = _check_route_required(middleware_name)
+    if route_required:
+        return True
     if is_middleware_required(middleware_name):
         return True
+
+    # Path-specific rules (disable/override by URL prefix)
+    if _is_path_rule_disabled(middleware_name):
+        return False
     
     # Check route-level exemptions first (from function decorators)
     route_exempt = _check_route_exemption(middleware_name)
@@ -286,8 +298,6 @@ def _check_route_exemption(middleware_name):
         bool or None: True if exempt, False if not exempt, None if unknown
     """
     try:
-        from flask import request, current_app
-        
         # Get the current endpoint
         endpoint = request.endpoint
         if not endpoint:
@@ -312,3 +322,96 @@ def _check_route_exemption(middleware_name):
     except Exception:
         # If we can't determine route exemption, fall back to runtime checking
         return None
+
+def _check_route_required(middleware_name):
+    """
+    Check if the current route explicitly requires a middleware.
+    
+    Args:
+        middleware_name (str): Name of middleware to check
+        
+    Returns:
+        bool: True if required, False otherwise
+    """
+    try:
+        endpoint = request.endpoint
+        if not endpoint:
+            return False
+            
+        view_func = current_app.view_functions.get(endpoint)
+        if not view_func:
+            return False
+        
+        required_middlewares = getattr(view_func, '_aiwaf_required_middlewares', set())
+        return middleware_name in required_middlewares
+        
+    except Exception:
+        return False
+
+
+def get_path_rule_for_request():
+    """Return the best matching path rule for the current request path."""
+    try:
+        path = request.path or ""
+        rules = _get_path_rules()
+        if not rules or not path:
+            return None
+
+        best_rule = None
+        best_len = -1
+        for rule in rules:
+            prefix = rule.get("PREFIX") or rule.get("prefix")
+            if not prefix:
+                continue
+            if path.startswith(prefix) and len(prefix) > best_len:
+                best_rule = rule
+                best_len = len(prefix)
+        return best_rule
+    except Exception:
+        return None
+
+
+def get_path_rule_overrides(section_key):
+    """Return override dict for a section (e.g., RATE_LIMIT) for the current path."""
+    rule = get_path_rule_for_request()
+    if not rule:
+        return {}
+    return rule.get(section_key) or rule.get(section_key.lower()) or {}
+
+
+def _get_path_rules():
+    try:
+        rules = current_app.config.get("AIWAF_PATH_RULES")
+        if rules is None:
+            settings = current_app.config.get("AIWAF_SETTINGS", {})
+            rules = settings.get("PATH_RULES")
+        return rules or []
+    except Exception:
+        return []
+
+
+def _normalize_middleware_name(name):
+    mapping = {
+        "IPAndKeywordBlockMiddleware": "ip_keyword_block",
+        "RateLimitMiddleware": "rate_limit",
+        "HoneypotTimingMiddleware": "honeypot",
+        "HeaderValidationMiddleware": "header_validation",
+        "GeoBlockMiddleware": "geo_block",
+        "AIAnomalyMiddleware": "ai_anomaly",
+        "UUIDTamperMiddleware": "uuid_tamper",
+        "AIWAFLoggingMiddleware": "logging",
+    }
+    if name in mapping:
+        return mapping[name]
+    return name.lower()
+
+
+def _is_path_rule_disabled(middleware_name):
+    rule = get_path_rule_for_request()
+    if not rule:
+        return False
+    disabled = rule.get("DISABLE") or rule.get("disable") or []
+    if not disabled:
+        return False
+    normalized = {_normalize_middleware_name(item) for item in disabled}
+    return _normalize_middleware_name(middleware_name) in normalized

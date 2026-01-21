@@ -160,7 +160,7 @@ class AIWAFAutoConfig:
     def _validate_aiwaf_data_dir(self, path: Path) -> bool:
         """Validate that a directory looks like an AIWAF data directory."""
         # Check for characteristic files
-        csv_files = ['whitelist.csv', 'blacklist.csv', 'keywords.csv']
+        csv_files = ['whitelist.csv', 'blacklist.csv', 'keywords.csv', 'geo_blocked_countries.csv']
         
         # If any CSV files exist, consider it valid
         if any((path / csv_file).exists() for csv_file in csv_files):
@@ -487,7 +487,7 @@ class AIWAFAutoConfig:
     def _calculate_data_directory_score(self, path: Path) -> int:
         """Calculate a score for a data directory based on its contents."""
         score = 0
-        csv_files = ['whitelist.csv', 'blacklist.csv', 'keywords.csv']
+        csv_files = ['whitelist.csv', 'blacklist.csv', 'keywords.csv', 'geo_blocked_countries.csv']
         
         for csv_file in csv_files:
             csv_path = path / csv_file

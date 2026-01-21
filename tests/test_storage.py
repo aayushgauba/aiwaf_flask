@@ -4,7 +4,9 @@ import shutil
 from aiwaf_flask.storage import (
     is_ip_whitelisted, add_ip_whitelist,
     is_ip_blacklisted, add_ip_blacklist, remove_ip_blacklist,
-    add_keyword, get_top_keywords
+    add_keyword, get_top_keywords,
+    add_geo_blocked_country, remove_geo_blocked_country,
+    is_country_geo_blocked, get_geo_blocked_countries
 )
 
 def test_add_ip_whitelist(app_context):
@@ -72,6 +74,18 @@ def test_get_top_keywords(app_context):
     for kw in top_keywords:
         assert kw in keywords
 
+def test_geo_blocked_countries_db(app_context):
+    """Test geo blocked countries in database storage."""
+    country = 'US'
+    assert not is_country_geo_blocked(country)
+
+    add_geo_blocked_country(country)
+    assert is_country_geo_blocked(country)
+    assert country in get_geo_blocked_countries()
+
+    remove_geo_blocked_country(country)
+    assert not is_country_geo_blocked(country)
+
 # CSV-specific tests
 @pytest.fixture
 def csv_app():
@@ -126,3 +140,14 @@ def test_csv_storage_keywords(csv_app_context):
     add_keyword(keyword)
     keywords = get_top_keywords()
     assert keyword in keywords
+
+def test_csv_storage_geo_blocked_countries(csv_app_context):
+    """Test CSV storage for geo blocked countries."""
+    country = 'FR'
+
+    add_geo_blocked_country(country)
+    assert is_country_geo_blocked(country)
+    assert country in get_geo_blocked_countries()
+
+    remove_geo_blocked_country(country)
+    assert not is_country_geo_blocked(country)

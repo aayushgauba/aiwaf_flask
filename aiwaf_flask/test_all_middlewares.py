@@ -4,7 +4,7 @@ from aiwaf_flask.ip_and_keyword_block_middleware import IPAndKeywordBlockMiddlew
 from aiwaf_flask.rate_limit_middleware import RateLimitMiddleware
 from aiwaf_flask.honeypot_timing_middleware import HoneypotTimingMiddleware
 from aiwaf_flask.header_validation_middleware import HeaderValidationMiddleware
-from aiwaf_flask.anomaly_middleware import AnomalyDetectionMiddleware
+from aiwaf_flask.anomaly_middleware import AIAnomalyMiddleware
 from aiwaf_flask.uuid_tamper_middleware import UUIDTamperMiddleware
 
 
@@ -20,7 +20,7 @@ def create_app():
     RateLimitMiddleware(app)
     HoneypotTimingMiddleware(app)
     HeaderValidationMiddleware(app)
-    AnomalyDetectionMiddleware(app)
+    AIAnomalyMiddleware(app)
     UUIDTamperMiddleware(app)
 
     @app.route('/ipkw', methods=['GET'])

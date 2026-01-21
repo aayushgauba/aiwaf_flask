@@ -35,9 +35,10 @@ except ImportError:
 from flask import Flask, current_app
 
 # AIWAF imports
-from .storage import get_exemption_store, get_keyword_store
+from .storage import get_exemption_store, get_keyword_store, _get_storage_mode, _read_csv_blacklist
 from .blacklist_manager import BlacklistManager
 from .utils import is_exempt, is_path_exempt
+from .geoip import lookup_country_name
 
 # ─────────── Configuration ───────────
 DEFAULT_LOG_DIR = 'logs'
@@ -649,6 +650,11 @@ class FlaskAITrainer:
                         ):
                             print(f"   ✅ {ip}: Anomalous but looks legitimate - NOT blocking")
                             continue
+
+                        # High burst alone should not trigger blocking
+                        if avg_kw_hits == 0 and max_404s == 0:
+                            print(f"   ✅ {ip}: Burst-only anomaly - NOT blocking")
+                            continue
                         
                         # Block if it shows clear signs of malicious behavior
                         BlacklistManager.block(ip, f"AI anomaly + suspicious patterns (kw:{avg_kw_hits:.1f}, 404s:{max_404s}, burst:{avg_burst:.1f})")
@@ -740,6 +746,11 @@ class FlaskAITrainer:
             print("✅ Enhanced AI protection now active with context-aware filtering!")
         print("="*60)
 
+        try:
+            _print_geoip_blocklist_summary()
+        except Exception:
+            pass
+
 # Global trainer instance
 _trainer = FlaskAITrainer()
 
@@ -770,3 +781,68 @@ def get_legitimate_keywords():
     return _trainer.get_legitimate_keywords() if _trainer.app else {
         "profile", "user", "account", "settings", "dashboard", "home", "about", "contact", "help", "search", "list", "view", "edit", "create", "update", "delete", "detail", "api", "auth", "login", "logout", "register", "signup", "reset", "confirm", "activate", "verify", "page", "category", "tag", "post", "article", "blog", "news", "item", "admin", "manage", "config", "option", "preference"
     }
+
+
+def _get_geoip_db_path():
+    default_path = os.path.join(os.path.dirname(__file__), "geolock", "ipinfo_lite.mmdb")
+    try:
+        return current_app.config.get("AIWAF_GEOIP_DB_PATH", default_path)
+    except Exception:
+        return default_path
+
+
+def _print_geoip_summary(ips, title):
+    if not ips:
+        return
+    db_path = _get_geoip_db_path()
+    if not db_path or not os.path.exists(db_path):
+        print("GeoIP summary skipped: AIWAF_GEOIP_DB_PATH not set or file missing.")
+        return
+
+    counts = Counter()
+    unknown = 0
+    for ip in ips:
+        name = lookup_country_name(ip, cache_prefix=None, cache_seconds=None, db_path=db_path)
+        if name:
+            counts[name] += 1
+        else:
+            unknown += 1
+
+    if not counts and not unknown:
+        return
+
+    top = counts.most_common(10)
+    print(title)
+    for code, cnt in top:
+        print(f"  - {code}: {cnt}")
+    if unknown:
+        print(f"  - UNKNOWN: {unknown}")
+
+
+def _get_blocked_ips():
+    try:
+        storage_mode = _get_storage_mode()
+    except Exception:
+        storage_mode = "memory"
+
+    if storage_mode == "database":
+        try:
+            from .db_models import BlacklistedIP
+            return [row.ip for row in BlacklistedIP.query.all()]
+        except Exception:
+            return []
+
+    if storage_mode == "csv":
+        try:
+            return list(_read_csv_blacklist().keys())
+        except Exception:
+            return []
+
+    return []
+
+
+def _print_geoip_blocklist_summary():
+    blocked_ips = _get_blocked_ips()
+    if not blocked_ips:
+        return
+    _print_geoip_summary(blocked_ips, "GeoIP summary for blocked IPs (top 10):")

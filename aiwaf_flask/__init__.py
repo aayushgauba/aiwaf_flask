@@ -8,6 +8,7 @@ from .header_validation_middleware import HeaderValidationMiddleware
 from .anomaly_middleware import AIAnomalyMiddleware
 from .uuid_tamper_middleware import UUIDTamperMiddleware
 from .logging_middleware import AIWAFLoggingMiddleware, analyze_access_logs
+from .geo_block_middleware import GeoBlockMiddleware
 
 # Exemption decorators for fine-grained control
 from .exemption_decorators import (
@@ -53,6 +54,7 @@ class AIWAF:
         'rate_limit': RateLimitMiddleware,
         'honeypot': HoneypotTimingMiddleware,
         'header_validation': HeaderValidationMiddleware,
+        'geo_block': GeoBlockMiddleware,
         'ai_anomaly': AIAnomalyMiddleware,
         'uuid_tamper': UUIDTamperMiddleware,
         'logging': AIWAFLoggingMiddleware
@@ -119,7 +121,13 @@ class AIWAF:
             'AIWAF_ENABLE_LOGGING': True,
             'AIWAF_WINDOW_SECONDS': 60,
             'AIWAF_DYNAMIC_TOP_N': 10,
-            'AIWAF_MODEL_PATH': 'aiwaf_flask/resources/model.pkl'
+            'AIWAF_MODEL_PATH': 'aiwaf_flask/resources/model.pkl',
+            'AIWAF_GEO_BLOCK_ENABLED': False,
+            'AIWAF_GEO_BLOCK_COUNTRIES': [],
+            'AIWAF_GEO_ALLOW_COUNTRIES': [],
+            'AIWAF_GEOIP_DB_PATH': 'ipinfo_lite.mmdb',
+            'AIWAF_GEO_CACHE_SECONDS': 3600,
+            'AIWAF_GEO_CACHE_PREFIX': 'aiwaf_geo'
         }
         
         for key, value in defaults.items():

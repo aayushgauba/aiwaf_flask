@@ -495,11 +495,15 @@ class AIAnomalyMiddleware:
                         # Enhanced blocking logic - don't block legitimate behavior
                         should_block = not (
                             avg_kw_hits < 3 and           # Allow some keyword hits
-                            scanning_404s < 5 and        # Focus on scanning 404s  
+                            scanning_404s < 5 and        # Focus on scanning 404s
                             legitimate_404s < 20 and     # Allow legitimate 404s
                             avg_burst < 25 and           # Allow higher burst
                             total_requests < 150         # Allow more total requests
                         )
+
+                        # High burst alone is not enough to block if there are no signals of abuse
+                        if avg_kw_hits == 0 and max_404s == 0:
+                            should_block = False
                         
                         if should_block:
                             reason = f"AI anomaly + scanning behavior (404s:{max_404s}, scanning:{scanning_404s}, kw:{avg_kw_hits:.1f}, burst:{avg_burst:.1f})"

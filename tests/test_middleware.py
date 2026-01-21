@@ -4,7 +4,7 @@ from unittest.mock import patch
 from flask import Flask
 from aiwaf_flask.middleware import register_aiwaf_middlewares
 from aiwaf_flask.db_models import db
-from aiwaf_flask.storage import add_ip_blacklist, add_keyword
+from aiwaf_flask.storage import add_ip_blacklist, add_keyword, add_geo_blocked_country
 
 @pytest.fixture
 def middleware_app():
@@ -13,7 +13,7 @@ def middleware_app():
     app.config['TESTING'] = True
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-    app.config['AIWAF_RATE_WINDOW'] = 2
+    app.config['AIWAF_RATE_WINDOW'] = 60
     app.config['AIWAF_RATE_MAX'] = 2
     app.config['AIWAF_RATE_FLOOD'] = 3
     app.config['AIWAF_MIN_FORM_TIME'] = 0.5
@@ -99,7 +99,7 @@ def test_header_validation(middleware_app):
     client = middleware_app.test_client()
     
     # Request without User-Agent should be blocked
-    response = client.get('/test', headers={})
+    response = client.get('/test', headers={'User-Agent': ''})
     assert response.status_code == 403
     
     # Request with short User-Agent should be blocked
@@ -126,6 +126,80 @@ def test_uuid_tampering(app):
     # Valid UUID should pass
     response = client.get('/test?uuid=550e8400-e29b-41d4-a716-446655440000', headers={'User-Agent': 'Test Browser 1.0'})
     assert response.status_code == 200
+
+def test_geo_block_allowlist(app, monkeypatch):
+    """Test geo blocking allowlist."""
+    from aiwaf_flask.geo_block_middleware import GeoBlockMiddleware
+
+    app.config['AIWAF_GEO_BLOCK_ENABLED'] = True
+    app.config['AIWAF_GEO_ALLOW_COUNTRIES'] = ['US']
+    app.config['AIWAF_GEO_BLOCK_COUNTRIES'] = []
+    app.config['AIWAF_EXEMPT_PATHS'] = set()
+
+    monkeypatch.setattr(
+        'aiwaf_flask.geo_block_middleware.get_country_for_ip',
+        lambda ip, config: 'US'
+    )
+
+    GeoBlockMiddleware(app)
+
+    @app.route('/geo-allow')
+    def geo_allow():
+        return 'OK'
+
+    client = app.test_client()
+    response = client.get('/geo-allow', headers={'User-Agent': 'Test Browser 1.0'})
+    assert response.status_code == 200
+
+def test_geo_block_blocklist(app, monkeypatch):
+    """Test geo blocking blocklist."""
+    from aiwaf_flask.geo_block_middleware import GeoBlockMiddleware
+
+    app.config['AIWAF_GEO_BLOCK_ENABLED'] = True
+    app.config['AIWAF_GEO_ALLOW_COUNTRIES'] = []
+    app.config['AIWAF_GEO_BLOCK_COUNTRIES'] = ['US']
+    app.config['AIWAF_EXEMPT_PATHS'] = set()
+
+    monkeypatch.setattr(
+        'aiwaf_flask.geo_block_middleware.get_country_for_ip',
+        lambda ip, config: 'US'
+    )
+
+    GeoBlockMiddleware(app)
+
+    @app.route('/geo-block')
+    def geo_block():
+        return 'OK'
+
+    client = app.test_client()
+    response = client.get('/geo-block', headers={'User-Agent': 'Test Browser 1.0'})
+    assert response.status_code == 403
+
+def test_geo_block_dynamic_blocked(app, monkeypatch):
+    """Test dynamic geo blocked countries."""
+    from aiwaf_flask.geo_block_middleware import GeoBlockMiddleware
+
+    app.config['AIWAF_GEO_BLOCK_ENABLED'] = True
+    app.config['AIWAF_GEO_ALLOW_COUNTRIES'] = []
+    app.config['AIWAF_GEO_BLOCK_COUNTRIES'] = []
+    app.config['AIWAF_EXEMPT_PATHS'] = set()
+
+    add_geo_blocked_country('FR')
+
+    monkeypatch.setattr(
+        'aiwaf_flask.geo_block_middleware.get_country_for_ip',
+        lambda ip, config: 'FR'
+    )
+
+    GeoBlockMiddleware(app)
+
+    @app.route('/geo-dynamic')
+    def geo_dynamic():
+        return 'OK'
+
+    client = app.test_client()
+    response = client.get('/geo-dynamic', headers={'User-Agent': 'Test Browser 1.0'})
+    assert response.status_code == 403
 
 @patch('time.time')
 def test_honeypot_timing(mock_time, middleware_app):

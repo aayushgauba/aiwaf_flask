@@ -1,6 +1,6 @@
 import re
 from flask import request
-from .storage import is_ip_whitelisted
+from .storage import is_ip_whitelisted, get_path_exemptions
 
 def get_ip():
     xff = request.headers.get("X-Forwarded-For")
@@ -36,7 +36,7 @@ def is_path_exempt(path):
     """Check if a path should be exempt from AIWAF protection."""
     try:
         from flask import current_app
-        exempt_paths = current_app.config.get('AIWAF_EXEMPT_PATHS', get_default_exempt_paths())
+        exempt_paths = get_exempt_paths()
     except:
         exempt_paths = get_default_exempt_paths()
     
@@ -58,6 +58,22 @@ def is_path_exempt(path):
             return True
     
     return False
+
+
+def get_exempt_paths():
+    """Get configured path exemptions combined with stored exemptions."""
+    try:
+        from flask import current_app
+        configured = current_app.config.get('AIWAF_EXEMPT_PATHS', get_default_exempt_paths())
+    except Exception:
+        configured = get_default_exempt_paths()
+    stored = get_path_exemptions()
+    combined = set()
+    for path in configured:
+        combined.add(str(path).lower())
+    for path in stored:
+        combined.add(str(path).lower())
+    return combined
 
 def get_default_exempt_paths():
     """Get default list of paths that should be exempt from AIWAF protection."""

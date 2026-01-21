@@ -7,6 +7,7 @@ AIWAF (AI Web Application Firewall) for Flask provides advanced, self-learning p
 - Rate limiting with burst detection
 - Honeypot timing protection
 - Header validation
+- Geo-blocking by country
 - **AI-powered anomaly detection** - Machine learning to detect suspicious patterns
 - UUID tampering detection
 - **Route-level exemption decorators** - Fine-grained control over middleware protection
@@ -72,7 +73,7 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key'
 
 # Enable all AIWAF protections (default behavior)
-aiwaf = AIWAF(app)  # ← Automatically enables ALL 7 middlewares
+aiwaf = AIWAF(app)  # ← Automatically enables ALL 8 middlewares
 
 @app.route('/')
 def home():
@@ -96,7 +97,7 @@ if __name__ == '__main__':
 
 ```python
 # These are all equivalent - they all enable ALL middlewares:
-aiwaf = AIWAF(app)                    # ← Default: enables all 7 middlewares
+aiwaf = AIWAF(app)                    # ← Default: enables all 8 middlewares
 aiwaf = AIWAF(app, middlewares=None)  # ← Same as above
 aiwaf = AIWAF()                       # ← Then call aiwaf.init_app(app)
 aiwaf.init_app(app)                   # ← Also enables all middlewares
@@ -126,7 +127,7 @@ aiwaf = AIWAF(app, disable_middlewares=[
     'honeypot',            # Disable honeypot timing
     'uuid_tamper'          # Disable UUID tampering protection
 ])
-# ↑ Enables 5 out of 7 middlewares (all except the 2 disabled)
+# ↑ Enables 6 out of 8 middlewares (all except the 2 disabled)
 
 # Option 3: Minimal security setup (essentials only)
 aiwaf = AIWAF(app, middlewares=[
@@ -145,6 +146,7 @@ aiwaf = AIWAF(app, middlewares=[
 | **Rate Limiting** | `rate_limit` | Protects against brute force and DDoS attacks |
 | **Honeypot Timing** | `honeypot` | Detects automated form submissions |
 | **Header Validation** | `header_validation` | Validates HTTP headers for security threats |
+| **Geo-Blocking** | `geo_block` | Blocks requests by country code |
 | **AI Anomaly Detection** | `ai_anomaly` | Machine learning-based pattern analysis |
 | **UUID Tampering** | `uuid_tamper` | Protects against UUID manipulation attacks |
 | **Request Logging** | `logging` | Comprehensive request/response logging |
@@ -153,10 +155,10 @@ aiwaf = AIWAF(app, middlewares=[
 
 | Pattern | Result | Use Case |
 |---------|--------|----------|
-| `AIWAF(app)` | **Enables ALL 7 middlewares** | Default - maximum protection |
+| `AIWAF(app)` | **Enables ALL 8 middlewares** | Default - maximum protection |
 | `AIWAF(app, middlewares=[...])` | Enables only specified | Custom selection |
 | `AIWAF(app, disable_middlewares=[...])` | Enables all except specified | Mostly default with exceptions |
-| `AIWAF()` then `init_app(app)` | **Enables ALL 7 middlewares** | Factory pattern |
+| `AIWAF()` then `init_app(app)` | **Enables ALL 8 middlewares** | Factory pattern |
 
 ### Middleware Management
 
@@ -540,6 +542,61 @@ app.config['AIWAF_EXEMPT_PATHS'] = {
     '/custom-health-check',
 }
 ```
+
+### Path Exemptions via CLI
+
+You can manage path exemptions dynamically (no deploy required):
+
+```bash
+aiwaf exempt-path list
+aiwaf exempt-path add /health --reason "Health check"
+aiwaf exempt-path remove /health
+```
+
+### Route Shell (Interactive)
+
+Browse your Flask routes and add exemptions interactively:
+
+```bash
+aiwaf route-shell --app myapp:create_app
+```
+
+Commands: `ls`, `cd <n|name>`, `up`, `pwd`, `exempt <n|name|.>`, `exit`
+
+### Geo-Blocking CLI
+
+Manage geo-blocked countries and summaries:
+
+```bash
+aiwaf geo list
+aiwaf geo add US
+aiwaf geo remove US
+
+aiwaf geo-summary --top 10 --limit 0
+```
+
+## Path-Specific Rules (Selective Middleware + Overrides)
+
+Path rules let you disable specific middlewares and override settings per URL prefix without fully exempting a path.
+
+```python
+app.config['AIWAF_PATH_RULES'] = [
+    {
+        'PREFIX': '/myapp/api/',
+        'DISABLE': ['HeaderValidationMiddleware'],
+        'RATE_LIMIT': {'WINDOW': 60, 'MAX': 2000},
+    },
+    {
+        'PREFIX': '/myapp/',
+        'RATE_LIMIT': {'WINDOW': 60, 'MAX': 200},
+    },
+]
+```
+
+Notes:
+- `PREFIX` uses a simple startswith match; the longest prefix wins.
+- `DISABLE` accepts either middleware names (`header_validation`) or class names (`HeaderValidationMiddleware`).
+- `RATE_LIMIT` supports `WINDOW`, `MAX`, and `FLOOD` overrides.
 
 ### Pattern Types
 

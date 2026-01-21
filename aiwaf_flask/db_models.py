@@ -15,3 +15,7 @@ class BlacklistedIP(db.Model):
 class Keyword(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     keyword = db.Column(db.String(255), unique=True, nullable=False)
+
+class GeoBlockedCountry(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    country_code = db.Column(db.String(8), unique=True, nullable=False)

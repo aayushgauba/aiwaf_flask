@@ -263,18 +263,19 @@ class TestConcurrentCSVAccess:
             """Worker that performs various operations."""
             for i in range(operations_per_thread):
                 try:
-                    # Whitelist operation
-                    ip_white = f"172.16.{thread_id}.{i}"
-                    add_ip_whitelist(ip_white)
-                    
-                    # Blacklist operation
-                    ip_black = f"172.17.{thread_id}.{i}"
-                    add_ip_blacklist(ip_black, f"Test from thread {thread_id}")
-                    
-                    # Keyword operation
-                    keyword = f"test_keyword_{thread_id}_{i}"
-                    add_keyword(keyword)
-                    
+                    with concurrent_csv_app.app_context():
+                        # Whitelist operation
+                        ip_white = f"172.16.{thread_id}.{i}"
+                        add_ip_whitelist(ip_white)
+
+                        # Blacklist operation
+                        ip_black = f"172.17.{thread_id}.{i}"
+                        add_ip_blacklist(ip_black, f"Test from thread {thread_id}")
+
+                        # Keyword operation
+                        keyword = f"test_keyword_{thread_id}_{i}"
+                        add_keyword(keyword)
+
                     # Small delay
                     time.sleep(random.uniform(0.0005, 0.002))
                     

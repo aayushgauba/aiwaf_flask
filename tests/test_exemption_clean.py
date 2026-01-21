@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Clean exemption decorator tests with proper isolation"""
 
+import tempfile
+import shutil
 from flask import Flask, jsonify
 from aiwaf_flask import AIWAF
 from aiwaf_flask.exemption_decorators import (
@@ -11,6 +13,15 @@ def reset_rate_limit_cache():
     """Clear the rate limiting cache between tests"""
     import aiwaf_flask.rate_limit_middleware as rl_mod
     rl_mod._aiwaf_cache.clear()
+
+def _setup_csv_storage(app):
+    temp_dir = tempfile.mkdtemp()
+    app.config['AIWAF_USE_CSV'] = True
+    app.config['AIWAF_DATA_DIR'] = temp_dir
+    return temp_dir
+
+def _cleanup_csv_storage(temp_dir):
+    shutil.rmtree(temp_dir, ignore_errors=True)
 
 def test_full_exemption():
     """Test @aiwaf_exempt decorator bypasses all protection"""
@@ -24,6 +35,7 @@ def test_full_exemption():
         'AIWAF_RATE_MAX': 1,        # Very low rate limit
         'AIWAF_MIN_AI_LOGS': 10,    # Low threshold for AI
     })
+    temp_dir = _setup_csv_storage(app)
     
     aiwaf = AIWAF()
     aiwaf.init_app(app)
@@ -37,14 +49,16 @@ def test_full_exemption():
     def protected_endpoint():
         return jsonify({'protected': True})
     
+    headers = {'User-Agent': 'Test Browser 1.0'}
     with app.test_client() as client:
         # Test exempt endpoint - should bypass all protection
         for i in range(3):  # Over rate limit
-            response = client.get('/health')
+            response = client.get('/health', headers=headers)
             assert response.status_code == 200
         
         print("   ✅ Exempt endpoint bypassed all protection")
     
+    _cleanup_csv_storage(temp_dir)
     print("   🎉 Full exemption test passed!\n")
 
 
@@ -60,6 +74,7 @@ def test_partial_exemption():
         'AIWAF_RATE_MAX': 1,        # Very low rate limit
         'AIWAF_MIN_AI_LOGS': 10,    # Low threshold for AI
     })
+    temp_dir = _setup_csv_storage(app)
     
     aiwaf = AIWAF()
     aiwaf.init_app(app)
@@ -69,14 +84,16 @@ def test_partial_exemption():
     def webhook():
         return jsonify({'received': True})
     
+    headers = {'User-Agent': 'Test Browser 1.0'}
     with app.test_client() as client:
         # Test webhook - should bypass rate limiting
         for i in range(3):  # Over rate limit
-            response = client.get('/webhook')
+            response = client.get('/webhook', headers=headers)
             assert response.status_code == 200
         
         print("   ✅ Webhook bypassed rate limiting")
     
+    _cleanup_csv_storage(temp_dir)
     print("   🎉 Partial exemption test passed!\n")
 
 
@@ -92,6 +109,7 @@ def test_middleware_only():
         'AIWAF_RATE_MAX': 1,        # Very low rate limit
         'AIWAF_MIN_AI_LOGS': 10,    # Low threshold for AI
     })
+    temp_dir = _setup_csv_storage(app)
     
     aiwaf = AIWAF()
     aiwaf.init_app(app)
@@ -101,17 +119,19 @@ def test_middleware_only():
     def sensitive_api():
         return jsonify({'sensitive': True})
     
+    headers = {'User-Agent': 'Test Browser 1.0'}
     with app.test_client() as client:
         # Test that rate limiting still works
-        response1 = client.get('/api/sensitive')
+        response1 = client.get('/api/sensitive', headers=headers)
         assert response1.status_code == 200
         
-        response2 = client.get('/api/sensitive')
+        response2 = client.get('/api/sensitive', headers=headers)
         assert response2.status_code == 429  # Rate limited
         
         print("   ✅ Sensitive API enforced rate limiting")
         print("   ✅ Other middlewares bypassed")
     
+    _cleanup_csv_storage(temp_dir)
     print("   🎉 Middleware-only test passed!\n")
 
 
@@ -127,6 +147,7 @@ def test_rate_limit_enforcement():
         'AIWAF_RATE_MAX': 1,        # Very low rate limit
         'AIWAF_MIN_AI_LOGS': 10,    # Low threshold for AI
     })
+    temp_dir = _setup_csv_storage(app)
     
     aiwaf = AIWAF()
     aiwaf.init_app(app)
@@ -135,17 +156,19 @@ def test_rate_limit_enforcement():
     def normal_endpoint():
         return jsonify({'normal': True})
     
+    headers = {'User-Agent': 'Test Browser 1.0'}
     with app.test_client() as client:
         # First request should work
-        response1 = client.get('/normal')
+        response1 = client.get('/normal', headers=headers)
         assert response1.status_code == 200
         
         # Second request should be rate limited
-        response2 = client.get('/normal')
+        response2 = client.get('/normal', headers=headers)
         assert response2.status_code == 429
         
         print("   ✅ Normal endpoint enforced rate limiting")
     
+    _cleanup_csv_storage(temp_dir)
     print("   🎉 Rate limit enforcement test passed!\n")
 
 

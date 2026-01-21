@@ -159,6 +159,16 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
+venv/
+resources/__pycache__/
+aiwaf_flask/__pycache__/
+aiwaf_flask.egg-info/
+aiwaf_data/
+aiwaf_logs/
+logs/
+test_ai_data
+test_aiwaf_data
+test_data
 
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can

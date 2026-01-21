@@ -6,6 +6,7 @@ from .header_validation_middleware import HeaderValidationMiddleware
 from .anomaly_middleware import AIAnomalyMiddleware
 from .uuid_tamper_middleware import UUIDTamperMiddleware
 from .logging_middleware import AIWAFLoggingMiddleware
+from .geo_block_middleware import GeoBlockMiddleware
 
 def register_aiwaf_middlewares(app, use_database=None, middlewares=None, disable_middlewares=None):
     """
@@ -23,6 +24,7 @@ def register_aiwaf_middlewares(app, use_database=None, middlewares=None, disable
         - rate_limit: Rate limiting protection
         - honeypot: Honeypot timing protection
         - header_validation: HTTP header validation
+        - geo_block: Geo-blocking by country
         - ai_anomaly: AI-powered anomaly detection
         - uuid_tamper: UUID tampering protection
         - logging: Request/response logging

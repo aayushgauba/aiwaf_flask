@@ -33,6 +33,10 @@ def test_website_scenario():
             "protection": "enabled",
             "storage": "csv"
         })
+
+    @app.route('/test')
+    def test_route():
+        return jsonify({"message": "test route works"})
     
     # Test the route that was failing
     with app.test_client() as client:
@@ -48,10 +52,6 @@ def test_website_scenario():
             return False
     
     # Test other routes to ensure middleware works
-    @app.route('/test')
-    def test_route():
-        return jsonify({"message": "test route works"})
-    
     with app.test_client() as client:
         print("🧪 Testing /test route...")
         response = client.get('/test')

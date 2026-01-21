@@ -10,6 +10,8 @@ Tests all exemption scenarios:
 """
 
 import time
+import tempfile
+import shutil
 from flask import Flask, jsonify, g
 from aiwaf_flask import (
     AIWAF, 
@@ -19,6 +21,19 @@ from aiwaf_flask import (
     aiwaf_require_protection,
     should_apply_middleware
 )
+
+def _setup_csv_storage(app):
+    temp_dir = tempfile.mkdtemp()
+    app.config['AIWAF_USE_CSV'] = True
+    app.config['AIWAF_DATA_DIR'] = temp_dir
+    return temp_dir
+
+def _cleanup_csv_storage(temp_dir):
+    shutil.rmtree(temp_dir, ignore_errors=True)
+
+def reset_rate_limit_cache():
+    import aiwaf_flask.rate_limit_middleware as rl_mod
+    rl_mod._aiwaf_cache.clear()
 
 
 def test_full_exemption():
@@ -32,6 +47,7 @@ def test_full_exemption():
         'AIWAF_MIN_FORM_TIME': 10,  # High time to trigger honeypot
         'AIWAF_MIN_AI_LOGS': 10,    # Low threshold for AI
     })
+    temp_dir = _setup_csv_storage(app)
     
     # Register AIWAF with all middlewares
     aiwaf = AIWAF()
@@ -46,10 +62,14 @@ def test_full_exemption():
     def protected_endpoint():
         return jsonify({'status': 'ok', 'protected': True})
     
+    headers = {
+        'User-Agent': 'Test Browser 1.0',
+        'X-Forwarded-For': '203.0.113.10'
+    }
     with app.test_client() as client:
         # Test exempt endpoint - should work even with aggressive limits
         for i in range(5):  # Way over rate limit
-            response = client.get('/health')
+            response = client.get('/health', headers=headers)
             assert response.status_code == 200
             data = response.get_json()
             assert data['protected'] == False
@@ -57,14 +77,15 @@ def test_full_exemption():
         print("   ✅ Exempt endpoint bypassed rate limiting")
         
         # Test protected endpoint - should be blocked by rate limiting
-        response1 = client.get('/protected')
+        response1 = client.get('/protected', headers=headers)
         assert response1.status_code == 200  # First request OK
         
-        response2 = client.get('/protected')
+        response2 = client.get('/protected', headers=headers)
         assert response2.status_code == 429  # Second request blocked by rate limit
         
         print("   ✅ Protected endpoint enforced rate limiting")
     
+    _cleanup_csv_storage(temp_dir)
     print("   🎉 Full exemption test passed!\n")
 
 
@@ -78,6 +99,7 @@ def test_partial_exemption():
         'AIWAF_RATE_MAX': 1,        # Very low rate limit
         'AIWAF_MIN_AI_LOGS': 10,    # Low threshold for AI
     })
+    temp_dir = _setup_csv_storage(app)
     
     aiwaf = AIWAF()
     aiwaf.init_app(app)
@@ -92,23 +114,28 @@ def test_partial_exemption():
     def normal_endpoint():
         return jsonify({'normal': True})
     
+    headers = {
+        'User-Agent': 'Test Browser 1.0',
+        'X-Forwarded-For': '203.0.113.10'
+    }
     with app.test_client() as client:
         # Test webhook - should bypass rate limiting
         for i in range(3):  # Over rate limit
-            response = client.get('/webhook')
+            response = client.get('/webhook', headers=headers)
             assert response.status_code == 200
         
         print("   ✅ Webhook bypassed rate limiting")
         
         # Test normal endpoint - should be rate limited
-        response1 = client.get('/normal')
+        response1 = client.get('/normal', headers=headers)
         assert response1.status_code == 200  # First OK
         
-        response2 = client.get('/normal')
+        response2 = client.get('/normal', headers=headers)
         assert response2.status_code == 429  # Blocked by rate limit
         
         print("   ✅ Normal endpoint enforced rate limiting")
     
+    _cleanup_csv_storage(temp_dir)
     print("   🎉 Partial exemption test passed!\n")
 
 
@@ -122,6 +149,7 @@ def test_middleware_only():
         'AIWAF_RATE_MAX': 1,        # Very low rate limit
         'AIWAF_MIN_AI_LOGS': 10,    # Low threshold for AI
     })
+    temp_dir = _setup_csv_storage(app)
     
     aiwaf = AIWAF()
     aiwaf.init_app(app)
@@ -131,22 +159,25 @@ def test_middleware_only():
     def sensitive_api():
         return jsonify({'sensitive': True})
     
+    headers = {'User-Agent': 'Test Browser 1.0'}
     with app.test_client() as client:
         # Test that rate limiting still works
-        response1 = client.get('/api/sensitive')
+        response1 = client.get('/api/sensitive', headers=headers)
         assert response1.status_code == 200
         
-        response2 = client.get('/api/sensitive')
+        response2 = client.get('/api/sensitive', headers=headers)
         assert response2.status_code == 429  # Rate limited
         
         print("   ✅ Rate limiting applied as expected")
         
         # Test malicious path - should be blocked by IP/keyword blocking
-        response3 = client.get('/api/sensitive/.env')
+        keyword_headers = {'User-Agent': 'Test Browser 1.0', 'X-Forwarded-For': '198.51.100.10'}
+        response3 = client.get('/api/sensitive/.env', headers=keyword_headers)
         assert response3.status_code == 403  # Blocked by keyword detection
         
         print("   ✅ Keyword blocking applied as expected")
     
+    _cleanup_csv_storage(temp_dir)
     print("   🎉 Selective protection test passed!\n")
 
 
@@ -160,6 +191,7 @@ def test_required_protection():
         'AIWAF_RATE_MAX': 1,
         'AIWAF_MIN_AI_LOGS': 10,
     })
+    temp_dir = _setup_csv_storage(app)
     
     aiwaf = AIWAF()
     aiwaf.init_app(app)
@@ -170,16 +202,18 @@ def test_required_protection():
     def critical_admin():
         return jsonify({'admin': True})
     
+    headers = {'User-Agent': 'Test Browser 1.0'}
     with app.test_client() as client:
         # Should still be rate limited despite exemption
-        response1 = client.get('/admin/critical')
+        response1 = client.get('/admin/critical', headers=headers)
         assert response1.status_code == 200
         
-        response2 = client.get('/admin/critical')
+        response2 = client.get('/admin/critical', headers=headers)
         assert response2.status_code == 429  # Still rate limited!
         
         print("   ✅ Required protection overrode exemption")
     
+    _cleanup_csv_storage(temp_dir)
     print("   🎉 Required protection test passed!\n")
 
 
@@ -188,6 +222,7 @@ def test_exemption_utilities():
     print("🧪 Testing exemption utility functions")
     
     app = Flask(__name__)
+    temp_dir = _setup_csv_storage(app)
     
     @app.route('/test-utils')
     @aiwaf_exempt_from('rate_limit', 'ai_anomaly')
@@ -209,25 +244,28 @@ def test_exemption_utilities():
         }
         return jsonify(results)
     
+    headers = {'User-Agent': 'Test Browser 1.0'}
     with app.test_client() as client:
         # Test partial exemption utilities
-        response = client.get('/test-utils')
+        response = client.get('/test-utils', headers=headers)
         data = response.get_json()
         
         assert data['should_apply_rate_limit'] == False  # Exempt
         assert data['should_apply_ip_block'] == True     # Not exempt
         assert data['should_apply_ai'] == False          # Exempt
-        
+
         print("   ✅ Partial exemption utilities work correctly")
         
         # Test full exemption utilities
-        response = client.get('/test-full-exempt')
+        response = client.get('/test-full-exempt', headers=headers)
         data = response.get_json()
         
         assert data['should_apply_rate_limit'] == False  # Fully exempt
         assert data['should_apply_ip_block'] == False    # Fully exempt
         
         print("   ✅ Full exemption utilities work correctly")
+
+    _cleanup_csv_storage(temp_dir)
     
     print("   🎉 Utility functions test passed!\n")
 
@@ -235,6 +273,7 @@ def test_exemption_utilities():
 def test_complex_exemption_combinations():
     """Test complex combinations of exemption decorators"""
     print("🧪 Testing complex exemption combinations")
+    reset_rate_limit_cache()
     
     app = Flask(__name__)
     app.config.update({
@@ -243,6 +282,7 @@ def test_complex_exemption_combinations():
         'AIWAF_MIN_AI_LOGS': 10,
     })
     
+    temp_dir = _setup_csv_storage(app)
     aiwaf = AIWAF()
     aiwaf.init_app(app)
     
@@ -258,25 +298,27 @@ def test_complex_exemption_combinations():
     def complex_endpoint2():
         return jsonify({'endpoint': 'complex2'})
     
+    headers = {'User-Agent': 'Test Browser 1.0'}
     with app.test_client() as client:
         # Test complex1 - should have rate limiting + IP blocking + forced header validation
-        response1 = client.get('/complex1')
+        response1 = client.get('/complex1', headers=headers)
         assert response1.status_code == 200
         
-        response2 = client.get('/complex1')
+        response2 = client.get('/complex1', headers=headers)
         assert response2.status_code == 429  # Rate limited
         
         print("   ✅ Complex combination 1 works correctly")
         
         # Test complex2 - exemption should be overridden by requirement
-        response3 = client.get('/complex2')
+        response3 = client.get('/complex2', headers=headers)
         assert response3.status_code == 200
         
-        response4 = client.get('/complex2')
+        response4 = client.get('/complex2', headers=headers)
         assert response4.status_code == 429  # Still rate limited despite exemption
         
         print("   ✅ Complex combination 2 works correctly")
     
+    _cleanup_csv_storage(temp_dir)
     print("   🎉 Complex combinations test passed!\n")
 
 

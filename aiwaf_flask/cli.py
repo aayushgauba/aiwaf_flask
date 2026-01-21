@@ -12,9 +12,11 @@ Provides command-line functions for managing AIWAF data:
 import argparse
 import sys
 import json
+from collections import Counter
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, List, Dict, Any
+import importlib
 
 def get_storage_instance():
     """Get storage instance based on available configuration."""
@@ -89,6 +91,41 @@ def get_storage_instance():
                         if row and len(row) > 0:
                             keywords.add(row[0])
             return keywords
+
+        def _read_csv_path_exemptions():
+            """Read path exemptions from CSV."""
+            data_dir = Path(_get_data_dir())
+            data_dir.mkdir(exist_ok=True)
+            path_file = data_dir / 'path_exemptions.csv'
+
+            exemptions = {}
+            if path_file.exists():
+                with open(path_file, 'r', newline='') as f:
+                    reader = csv.reader(f)
+                    next(reader, None)  # Skip header
+                    for row in reader:
+                        if row and len(row) > 0:
+                            path = row[0].strip()
+                            reason = row[1].strip() if len(row) > 1 else ''
+                            if path:
+                                exemptions[path.lower()] = reason
+            return exemptions
+
+        def _read_csv_geo_blocked_countries():
+            """Read geo blocked countries from CSV."""
+            data_dir = Path(_get_data_dir())
+            data_dir.mkdir(exist_ok=True)
+            countries_file = data_dir / 'geo_blocked_countries.csv'
+
+            countries = set()
+            if countries_file.exists():
+                with open(countries_file, 'r', newline='') as f:
+                    reader = csv.reader(f)
+                    next(reader, None)  # Skip header
+                    for row in reader:
+                        if row and len(row) > 0:
+                            countries.add(row[0].upper())
+            return countries
         
         def _append_csv_whitelist(ip):
             """Add IP to whitelist CSV."""
@@ -131,14 +168,69 @@ def get_storage_instance():
                 if not file_exists:
                     writer.writerow(['keyword', 'timestamp'])
                 writer.writerow([keyword, datetime.now().isoformat()])
+
+        def _append_csv_path_exemption(path, reason=""):
+            """Add path exemption to CSV."""
+            data_dir = Path(_get_data_dir())
+            data_dir.mkdir(exist_ok=True)
+            path_file = data_dir / 'path_exemptions.csv'
+
+            file_exists = path_file.exists()
+            with open(path_file, 'a', newline='') as f:
+                writer = csv.writer(f)
+                if not file_exists:
+                    writer.writerow(['path', 'reason', 'timestamp'])
+                writer.writerow([path, reason, datetime.now().isoformat()])
+
+        def _rewrite_csv_path_exemptions(exemptions):
+            """Rewrite path exemptions CSV."""
+            data_dir = Path(_get_data_dir())
+            data_dir.mkdir(exist_ok=True)
+            path_file = data_dir / 'path_exemptions.csv'
+            with open(path_file, 'w', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow(['path', 'reason', 'timestamp'])
+                for path, reason in exemptions.items():
+                    writer.writerow([path, reason, datetime.now().isoformat()])
+
+        def _append_csv_geo_blocked_country(country_code):
+            """Add country code to geo blocked countries CSV."""
+            data_dir = Path(_get_data_dir())
+            data_dir.mkdir(exist_ok=True)
+            countries_file = data_dir / 'geo_blocked_countries.csv'
+
+            file_exists = countries_file.exists()
+            with open(countries_file, 'a', newline='') as f:
+                writer = csv.writer(f)
+                if not file_exists:
+                    writer.writerow(['country', 'timestamp'])
+                writer.writerow([country_code.upper(), datetime.now().isoformat()])
+
+        def _rewrite_csv_geo_blocked_countries(countries):
+            """Rewrite geo blocked countries CSV."""
+            data_dir = Path(_get_data_dir())
+            data_dir.mkdir(exist_ok=True)
+            countries_file = data_dir / 'geo_blocked_countries.csv'
+
+            with open(countries_file, 'w', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow(['country', 'timestamp'])
+                for code in sorted(countries):
+                    writer.writerow([code, datetime.now().isoformat()])
         
         return {
             'read_whitelist': _read_csv_whitelist,
             'read_blacklist': _read_csv_blacklist,
             'read_keywords': _read_csv_keywords,
+            'read_geo_blocked_countries': _read_csv_geo_blocked_countries,
+            'read_path_exemptions': _read_csv_path_exemptions,
             'add_whitelist': _append_csv_whitelist,
             'add_blacklist': _append_csv_blacklist,
             'add_keyword': _append_csv_keyword,
+            'add_geo_blocked_country': _append_csv_geo_blocked_country,
+            'rewrite_geo_blocked_countries': _rewrite_csv_geo_blocked_countries,
+            'add_path_exemption': _append_csv_path_exemption,
+            'rewrite_path_exemptions': _rewrite_csv_path_exemptions,
             'data_dir': _get_data_dir,
             'mode': 'CSV'
         }
@@ -195,6 +287,23 @@ class AIWAFManager:
         except Exception as e:
             print(f"❌ Error reading keywords: {e}")
             return []
+
+    def list_geo_blocked_countries(self) -> List[str]:
+        """Get all geo blocked countries."""
+        try:
+            countries = self.storage['read_geo_blocked_countries']()
+            return sorted(list(countries))
+        except Exception as e:
+            print(f"❌ Error reading geo blocked countries: {e}")
+            return []
+
+    def list_path_exemptions(self) -> Dict[str, str]:
+        """Get all path exemptions."""
+        try:
+            return dict(self.storage['read_path_exemptions']())
+        except Exception as e:
+            print(f"❌ Error reading path exemptions: {e}")
+            return {}
     
     def add_to_whitelist(self, ip: str) -> bool:
         """Add IP to whitelist."""
@@ -224,6 +333,86 @@ class AIWAFManager:
             return True
         except Exception as e:
             print(f"❌ Error adding keyword '{keyword}': {e}")
+            return False
+
+    def add_geo_blocked_country(self, country_code: str) -> bool:
+        """Add country to geo blocked list."""
+        if not country_code:
+            print("❌ Country code is required")
+            return False
+
+    def add_path_exemption(self, path: str, reason: str = "") -> bool:
+        """Add a path exemption."""
+        if not path:
+            print("❌ Path is required")
+            return False
+        normalized = str(path).strip()
+        if not normalized:
+            print("❌ Path is required")
+            return False
+        current = self.list_path_exemptions()
+        if normalized.lower() in current:
+            print(f"⚠️  Already exempt: {normalized}")
+            return True
+        try:
+            self.storage['add_path_exemption'](normalized, reason)
+            print(f"✅ Exempted path: {normalized}")
+            return True
+        except Exception as e:
+            print(f"❌ Error adding path exemption: {e}")
+            return False
+
+    def remove_path_exemption(self, path: str) -> bool:
+        """Remove a path exemption."""
+        if not path:
+            print("❌ Path is required")
+            return False
+        normalized = str(path).strip()
+        if not normalized:
+            print("❌ Path is required")
+            return False
+        exemptions = self.list_path_exemptions()
+        if normalized.lower() not in exemptions:
+            print(f"⚠️  Not exempt: {normalized}")
+            return False
+        try:
+            exemptions.pop(normalized.lower(), None)
+            self.storage['rewrite_path_exemptions'](exemptions)
+            print(f"✅ Removed path exemption: {normalized}")
+            return True
+        except Exception as e:
+            print(f"❌ Error removing path exemption: {e}")
+            return False
+        code = str(country_code).strip().upper()
+        try:
+            current = set(self.list_geo_blocked_countries())
+            if code in current:
+                print(f"⚠️  {code} already blocked")
+                return True
+            self.storage['add_geo_blocked_country'](code)
+            print(f"✅ Blocked country added: {code}")
+            return True
+        except Exception as e:
+            print(f"❌ Error adding geo blocked country '{code}': {e}")
+            return False
+
+    def remove_geo_blocked_country(self, country_code: str) -> bool:
+        """Remove country from geo blocked list."""
+        if not country_code:
+            print("❌ Country code is required")
+            return False
+        code = str(country_code).strip().upper()
+        try:
+            current = set(self.list_geo_blocked_countries())
+            if code not in current:
+                print(f"⚠️  {code} not found in geo blocked countries")
+                return False
+            current.discard(code)
+            self.storage['rewrite_geo_blocked_countries'](current)
+            print(f"✅ Blocked country removed: {code}")
+            return True
+        except Exception as e:
+            print(f"❌ Error removing geo blocked country '{code}': {e}")
             return False
     
     def remove_from_whitelist(self, ip: str) -> bool:
@@ -439,6 +628,68 @@ class AIWAFManager:
         except Exception as e:
             print(f"❌ Error analyzing logs: {e}")
             return False
+
+    def geoip_traffic_summary(self, log_dir: Optional[str] = None, top: int = 10, limit: int = 0):
+        """Summarize request traffic by country using the GeoIP database."""
+        try:
+            from flask import Flask
+            from .trainer import _trainer
+            from .geoip import lookup_country_name
+
+            top_n = max(1, int(top))
+            max_lines = max(0, int(limit))
+
+            if log_dir:
+                actual_log_dir = log_dir
+            else:
+                try:
+                    from .auto_config import get_auto_configured_log_dir
+                    actual_log_dir, _ = get_auto_configured_log_dir()
+                except ImportError:
+                    actual_log_dir = 'logs'
+
+            app = Flask(__name__)
+            app.config['AIWAF_LOG_DIR'] = actual_log_dir
+            _trainer.init_app(app)
+
+            lines = _trainer._read_all_logs()
+            if not lines:
+                print("No log lines found – check AIWAF_LOG_DIR setting.")
+                return False
+
+            ip_counts = Counter()
+            processed = 0
+            for line in lines:
+                rec = _trainer._parse(line)
+                if not rec:
+                    continue
+                ip_counts[rec["ip"]] += 1
+                processed += 1
+                if max_lines and processed >= max_lines:
+                    break
+
+            if not ip_counts:
+                print("No valid log entries to process.")
+                return False
+
+            country_counts = Counter()
+            unknown = 0
+            for ip, count in ip_counts.items():
+                name = lookup_country_name(ip, cache_prefix="aiwaf:geo:summary:", cache_seconds=3600)
+                if name:
+                    country_counts[name] += count
+                else:
+                    unknown += count
+
+            print(f"GeoIP traffic summary (top {top_n}):")
+            for code, count in country_counts.most_common(top_n):
+                print(f"  - {code}: {count}")
+            if unknown:
+                print(f"  - UNKNOWN: {unknown}")
+            return True
+        except Exception as e:
+            print(f"❌ GeoIP summary failed: {e}")
+            return False
     
     def train_model(self, log_dir: Optional[str] = None, disable_ai: bool = False, 
                    min_ai_logs: int = 10000, force_ai: bool = False, verbose: bool = False):
@@ -625,6 +876,158 @@ class AIWAFManager:
             print(f"❌ Model diagnostics failed: {e}")
             return False
 
+
+class RouteNode:
+    def __init__(self, name, full_path):
+        self.name = name
+        self.full_path = full_path
+        self.children = {}
+        self.is_endpoint = False
+
+
+def _normalize_path(path, trailing_slash=True):
+    path = str(path).strip()
+    if not path.startswith("/"):
+        path = "/" + path
+    while "//" in path:
+        path = path.replace("//", "/")
+    if trailing_slash and not path.endswith("/"):
+        path = path + "/"
+    return path
+
+
+def _collect_routes(app):
+    routes = []
+    for rule in app.url_map.iter_rules():
+        if rule.endpoint == "static":
+            continue
+        routes.append(_normalize_path(rule.rule))
+    return routes
+
+
+def _build_tree(routes):
+    root = RouteNode("/", "/")
+    for route in routes:
+        route = _normalize_path(route)
+        parts = [p for p in route.strip("/").split("/") if p]
+        node = root
+        current = ""
+        for part in parts:
+            current = _normalize_path(f"{current}/{part}", trailing_slash=True)
+            if part not in node.children:
+                node.children[part] = RouteNode(part, current)
+            node = node.children[part]
+        node.is_endpoint = True
+    return root
+
+
+def _sorted_children(node):
+    return sorted(node.children.values(), key=lambda n: n.name)
+
+
+def _load_flask_app(app_path):
+    module_path, _, obj = app_path.partition(":")
+    if not module_path or not obj:
+        raise ValueError("Use --app module:app or module:create_app")
+    module = importlib.import_module(module_path)
+    target = getattr(module, obj, None)
+    if target is None:
+        raise ValueError(f"App not found: {app_path}")
+    if callable(target):
+        return target()
+    return target
+
+
+def _resolve_target(current, arg):
+    children = _sorted_children(current)
+    if arg.isdigit():
+        idx = int(arg) - 1
+        if 0 <= idx < len(children):
+            return children[idx]
+        return None
+    for child in children:
+        if child.name == arg or f"{child.name}/" == arg:
+            return child
+    return None
+
+
+def _route_shell(app, manager):
+    routes = _collect_routes(app)
+    root = _build_tree(routes)
+    stack = [root]
+
+    print("AIWAF route shell. Type 'help' for commands.")
+    while True:
+        current = stack[-1]
+        prompt = f"aiwaf:{current.full_path}$ "
+        try:
+            raw = input(prompt).strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\nExiting.")
+            break
+
+        if not raw or raw == "ls":
+            children = _sorted_children(current)
+            if current.is_endpoint and current is not root:
+                print("(endpoint) .")
+            if not children:
+                print("(empty)")
+                continue
+            for idx, child in enumerate(children, 1):
+                suffix = " (endpoint)" if child.is_endpoint else ""
+                print(f"{idx}. {child.name}/{suffix}")
+            continue
+
+        parts = raw.split()
+        cmd = parts[0].lower()
+        arg = parts[1] if len(parts) > 1 else None
+
+        if cmd in {"quit", "exit"}:
+            break
+        if cmd in {"help", "?"}:
+            print("Commands: ls, cd <n|name>, up, pwd, exempt <n|name|.>, exit")
+            continue
+        if cmd in {"up", ".."}:
+            if len(stack) > 1:
+                stack.pop()
+            continue
+        if cmd == "pwd":
+            print(current.full_path)
+            continue
+        if cmd == "cd":
+            if not arg:
+                print("Usage: cd <index|name>")
+                continue
+            if arg in {"..", "/"}:
+                if len(stack) > 1:
+                    stack.pop()
+                continue
+            target = _resolve_target(current, arg)
+            if not target:
+                print(f"Unknown target: {arg}")
+                continue
+            stack.append(target)
+            continue
+        if cmd == "exempt":
+            if not arg:
+                print("Usage: exempt <index|name|.>")
+                continue
+            target = current if arg == "." else _resolve_target(current, arg)
+            if not target:
+                print(f"Unknown target: {arg}")
+                continue
+            path = target.full_path
+            existing = set(manager.list_path_exemptions().keys())
+            if path.lower() in existing:
+                print(f"Already exempt: {path}")
+                continue
+            reason = input("Reason (optional): ").strip()
+            manager.add_path_exemption(path, reason=reason or "Manual exemption")
+            continue
+
+        print(f"Unknown command: {cmd}")
+
+
 def main():
     """Main CLI interface."""
     parser = argparse.ArgumentParser(description='AIWAF Flask Management Tool')
@@ -649,6 +1052,19 @@ def main():
     remove_parser.add_argument('type', choices=['whitelist', 'blacklist'], 
                              help='Type of list to remove from')
     remove_parser.add_argument('value', help='IP address to remove')
+
+    # Geo blocked countries commands
+    geo_parser = subparsers.add_parser('geo', help='Manage geo blocked countries')
+    geo_parser.add_argument('action', choices=['add', 'remove', 'list'],
+                            help='Action to perform')
+    geo_parser.add_argument('country', nargs='?', help='ISO country code (e.g. US)')
+
+    # Path exemption commands
+    path_parser = subparsers.add_parser('exempt-path', help='Manage path exemptions')
+    path_parser.add_argument('action', choices=['add', 'remove', 'list'],
+                             help='Action to perform')
+    path_parser.add_argument('path', nargs='?', help='Path to exempt (e.g. /health)')
+    path_parser.add_argument('--reason', default='', help='Reason for exemption')
     
     # Stats command
     subparsers.add_parser('stats', help='Show statistics')
@@ -686,6 +1102,18 @@ def main():
     
     import_parser = subparsers.add_parser('import', help='Import configuration')
     import_parser.add_argument('filename', help='Input JSON file')
+
+    # GeoIP summary command
+    geo_summary_parser = subparsers.add_parser('geo-summary', help='GeoIP traffic summary from logs')
+    geo_summary_parser.add_argument('--top', type=int, default=10,
+                                    help='Number of top countries to display (default: 10)')
+    geo_summary_parser.add_argument('--limit', type=int, default=0,
+                                    help='Limit number of log lines processed (default: 0, no limit)')
+    geo_summary_parser.add_argument('--log-dir', help='Custom log directory path (default: auto)')
+
+    # Route shell command
+    route_shell_parser = subparsers.add_parser('route-shell', help='Interactive route browser for exemptions')
+    route_shell_parser.add_argument('--app', required=True, help='Flask app import path (module:app)')
     
     args = parser.parse_args()
     
@@ -735,6 +1163,40 @@ def main():
             manager.remove_from_whitelist(args.value)
         elif args.type == 'blacklist':
             manager.remove_from_blacklist(args.value)
+
+    elif args.command == 'geo':
+        if args.action == 'list':
+            countries = manager.list_geo_blocked_countries()
+            if countries:
+                print("Blocked countries: " + ", ".join(countries))
+            else:
+                print("Blocked countries: (none)")
+        else:
+            if not args.country:
+                print("❌ Country code is required")
+                return
+            if args.action == 'add':
+                manager.add_geo_blocked_country(args.country)
+            elif args.action == 'remove':
+                manager.remove_geo_blocked_country(args.country)
+
+    elif args.command == 'exempt-path':
+        if args.action == 'list':
+            exemptions = manager.list_path_exemptions()
+            if exemptions:
+                for path, reason in sorted(exemptions.items()):
+                    suffix = f" ({reason})" if reason else ""
+                    print(f"{path}{suffix}")
+            else:
+                print("Path exemptions: (none)")
+        else:
+            if not args.path:
+                print("❌ Path is required")
+                return
+            if args.action == 'add':
+                manager.add_path_exemption(args.path, reason=args.reason)
+            elif args.action == 'remove':
+                manager.remove_path_exemption(args.path)
     
     elif args.command == 'stats':
         manager.show_stats()
@@ -758,6 +1220,17 @@ def main():
     
     elif args.command == 'import':
         manager.import_config(args.filename)
+
+    elif args.command == 'geo-summary':
+        manager.geoip_traffic_summary(args.log_dir, args.top, args.limit)
+
+    elif args.command == 'route-shell':
+        try:
+            app = _load_flask_app(args.app)
+        except Exception as e:
+            print(f"❌ Failed to load app: {e}")
+            return
+        _route_shell(app, manager)
 
 if __name__ == '__main__':
     main()

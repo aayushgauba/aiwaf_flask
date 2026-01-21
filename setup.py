@@ -50,6 +50,9 @@ setup(
             "numpy>=1.20.0",
             "scikit-learn>=1.0.0",
         ],
+        "geo": [
+            "geoip2>=4.0.0",
+        ],
         "dev": [
             "pytest>=7.0.0",
             "flask-testing>=0.8.1",
@@ -58,6 +61,7 @@ setup(
         "all": [
             "numpy>=1.20.0",
             "scikit-learn>=1.0.0",
+            "geoip2>=4.0.0",
             "pytest>=7.0.0",
             "flask-testing>=0.8.1",
             "pytest-cov>=4.0.0",
