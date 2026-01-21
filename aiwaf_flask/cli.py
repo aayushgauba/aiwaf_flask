@@ -985,7 +985,13 @@ def _route_shell(app, manager):
         if cmd in {"quit", "exit"}:
             break
         if cmd in {"help", "?"}:
-            print("Commands: ls, cd <n|name|..|/>, up, pwd, exempt <n|name|.>, exit")
+            print("AIWAF Path Shell Commands:")
+            print("  ls                     # list routes at current level")
+            print("  cd <index|name>        # enter a route segment")
+            print("  up / cd ..             # go up one level")
+            print("  pwd                    # show current path prefix")
+            print("  exempt <index|name|.>  # add exemption for selection or current path")
+            print("  exit                   # quit")
             continue
         if cmd in {"up", ".."}:
             if len(stack) > 1:
@@ -996,16 +1002,14 @@ def _route_shell(app, manager):
             continue
         if cmd == "cd":
             if not arg:
-                if len(stack) > 1:
-                    stack[:] = [root]
+                print("Usage: cd <index|name>")
                 continue
             if arg == "..":
                 if len(stack) > 1:
                     stack.pop()
                 continue
             if arg == "/":
-                if len(stack) > 1:
-                    stack[:] = [root]
+                stack[:] = [root]
                 continue
             target = _resolve_target(current, arg)
             if not target:
