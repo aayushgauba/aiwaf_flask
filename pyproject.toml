@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "aiwaf-flask"
-version = "0.1.4"
+version = "0.1.5"
 description = "Advanced AI-powered Web Application Firewall for Flask with intelligent threat detection, rate limiting, IP blocking, and real-time protection against web attacks"
 readme = "README.md"
 license = {text = "MIT"}
@@ -38,15 +38,15 @@ requires-python = ">=3.8"
 dependencies = [
     "flask>=2.0.0",
     "flask-sqlalchemy>=3.0.0",
-    "numpy>=1.20.0",
-    "scikit-learn>=1.0.0",
     "geoip2>=4.0.0",
 ]
 
 [project.optional-dependencies]
 ai = [
     "numpy>=1.20.0",
+    "pandas>=1.5.0",
     "scikit-learn>=1.0.0",
+    "joblib>=1.0.0",
 ]
 geo = [
     "geoip2>=4.0.0",
@@ -58,11 +58,13 @@ dev = [
 ]
 all = [
     "numpy>=1.20.0",
+    "pandas>=1.5.0",
     "scikit-learn>=1.0.0",
     "geoip2>=4.0.0",
     "pytest>=7.0.0",
     "flask-testing>=0.8.1",
     "pytest-cov>=4.0.0",
+    "joblib>=1.0.0",
 ]
 
 [project.urls]
