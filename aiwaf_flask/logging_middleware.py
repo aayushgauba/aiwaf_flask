@@ -78,7 +78,10 @@ class AIWAFLoggingMiddleware:
     def _log_access(self, response):
         """Log access in standard web server format."""
         if self.log_format == 'csv':
-            self._log_access_csv(response)
+            if not self.app.config.get('AIWAF_USE_CSV', True):
+                self._log_access_combined(response)
+            else:
+                self._log_access_csv(response)
         elif self.log_format == 'json':
             self._log_access_json(response)
         else:
@@ -129,36 +132,37 @@ class AIWAFLoggingMiddleware:
         start_time = getattr(g, 'aiwaf_start_time', time.time())
         response_time_ms = int((time.time() - start_time) * 1000)
         
-        # Initialize CSV with headers if file doesn't exist
+        headers = [
+            'timestamp', 'ip', 'method', 'path', 'query_string', 'protocol',
+            'status_code', 'content_length', 'response_time_ms', 'referer',
+            'user_agent', 'blocked', 'block_reason'
+        ]
+
+        row = {
+            'timestamp': datetime.now().isoformat(),
+            'ip': self._get_client_ip(),
+            'method': request.method,
+            'path': request.path,
+            'query_string': request.query_string.decode('utf-8', errors='ignore'),
+            'protocol': request.environ.get('SERVER_PROTOCOL', 'HTTP/1.1'),
+            'status_code': response.status_code,
+            'content_length': response.content_length or 0,
+            'response_time_ms': response_time_ms,
+            'referer': request.headers.get('Referer', ''),
+            'user_agent': request.headers.get('User-Agent', ''),
+            'blocked': getattr(g, 'aiwaf_blocked', False),
+            'block_reason': getattr(g, 'aiwaf_block_reason', ''),
+        }
+
+        # Python fallback
         if not self.access_log_file.exists():
             with open(self.access_log_file, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
-                writer.writerow([
-                    'timestamp', 'ip', 'method', 'path', 'query_string', 'protocol',
-                    'status_code', 'content_length', 'response_time_ms', 'referer',
-                    'user_agent', 'blocked', 'block_reason'
-                ])
-        
-        # Log data
-        row_data = [
-            datetime.now().isoformat(),
-            self._get_client_ip(),
-            request.method,
-            request.path,
-            request.query_string.decode('utf-8', errors='ignore'),
-            request.environ.get('SERVER_PROTOCOL', 'HTTP/1.1'),
-            response.status_code,
-            response.content_length or 0,
-            response_time_ms,
-            request.headers.get('Referer', ''),
-            request.headers.get('User-Agent', ''),
-            getattr(g, 'aiwaf_blocked', False),
-            getattr(g, 'aiwaf_block_reason', '')
-        ]
-        
+                writer.writerow(headers)
+
         with open(self.access_log_file, 'a', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
-            writer.writerow(row_data)
+            writer.writerow([row.get(key, '') for key in headers])
     
     def _log_access_json(self, response):
         """Log access in JSON format."""

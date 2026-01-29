@@ -346,6 +346,8 @@ class TestConcurrentCSVAccess:
             thread.join()
         
         total_time = time.time() - start_time
+        if total_time <= 0:
+            total_time = 1e-6
         total_operations = num_threads * operations_per_thread * 2  # add + check
         ops_per_second = total_operations / total_time
         

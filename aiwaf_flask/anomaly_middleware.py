@@ -12,6 +12,7 @@ from flask import request, jsonify, g, current_app
 from .utils import get_ip, is_exempt, is_path_exempt
 from .blacklist_manager import BlacklistManager
 from .exemption_decorators import should_apply_middleware
+from . import rust_backend
 
 # Try to import numpy and ML dependencies
 try:
@@ -461,49 +462,79 @@ class AIAnomalyMiddleware:
                     recent_data = [d for d in data if now - d[0] <= 300]  # Last 5 minutes
                     
                     if recent_data:
-                        # Calculate behavior metrics
-                        recent_kw_hits = []
-                        recent_404s = 0
-                        recent_burst_counts = []
-                        scanning_404s = 0
-                        
-                        for entry_time, entry_path, entry_status, entry_resp_time in recent_data:
-                            # Calculate keyword hits for this entry
-                            entry_known_path = self._route_exists(entry_path)
-                            entry_kw_hits = 0
-                            if not entry_known_path and not is_path_exempt(entry_path):
-                                entry_kw_hits = sum(1 for kw in self.malicious_keywords if kw in entry_path.lower())
-                            recent_kw_hits.append(entry_kw_hits)
-                            
-                            # Count 404s and scanning 404s
-                            if entry_status == 404:
-                                recent_404s += 1
-                                if self._is_scanning_path(entry_path):
-                                    scanning_404s += 1
-                            
-                            # Calculate burst for this entry
-                            entry_burst = sum(1 for (t, _, _, _) in recent_data if abs(entry_time - t) <= 10)
-                            recent_burst_counts.append(entry_burst)
-                        
-                        # Calculate averages and metrics
-                        avg_kw_hits = sum(recent_kw_hits) / len(recent_kw_hits) if recent_kw_hits else 0
-                        max_404s = recent_404s
-                        avg_burst = sum(recent_burst_counts) / len(recent_burst_counts) if recent_burst_counts else 0
-                        total_requests = len(recent_data)
-                        legitimate_404s = max_404s - scanning_404s
-                        
-                        # Enhanced blocking logic - don't block legitimate behavior
-                        should_block = not (
-                            avg_kw_hits < 3 and           # Allow some keyword hits
-                            scanning_404s < 5 and        # Focus on scanning 404s
-                            legitimate_404s < 20 and     # Allow legitimate 404s
-                            avg_burst < 25 and           # Allow higher burst
-                            total_requests < 150         # Allow more total requests
+                        use_rust = (
+                            self.app.config.get("AIWAF_USE_RUST", False)
+                            and rust_backend.rust_available()
                         )
+                        rust_result = None
+                        if use_rust:
+                            rust_entries = []
+                            for entry_time, entry_path, entry_status, entry_resp_time in recent_data:
+                                entry_known_path = self._route_exists(entry_path)
+                                kw_check = not entry_known_path and not is_path_exempt(entry_path)
+                                rust_entries.append({
+                                    "path_lower": entry_path.lower(),
+                                    "timestamp": float(entry_time),
+                                    "status": int(entry_status),
+                                    "kw_check": kw_check,
+                                })
+                            rust_result = rust_backend.analyze_recent_behavior(
+                                rust_entries,
+                                list(self.malicious_keywords),
+                            )
 
-                        # High burst alone is not enough to block if there are no signals of abuse
-                        if avg_kw_hits == 0 and max_404s == 0:
-                            should_block = False
+                        if rust_result:
+                            avg_kw_hits = rust_result.get("avg_kw_hits", 0.0)
+                            max_404s = rust_result.get("max_404s", 0)
+                            avg_burst = rust_result.get("avg_burst", 0.0)
+                            total_requests = rust_result.get("total_requests", len(recent_data))
+                            scanning_404s = rust_result.get("scanning_404s", 0)
+                            legitimate_404s = rust_result.get("legitimate_404s", max_404s - scanning_404s)
+                            should_block = rust_result.get("should_block", False)
+                        else:
+                            # Calculate behavior metrics (Python fallback)
+                            recent_kw_hits = []
+                            recent_404s = 0
+                            recent_burst_counts = []
+                            scanning_404s = 0
+                            
+                            for entry_time, entry_path, entry_status, entry_resp_time in recent_data:
+                                # Calculate keyword hits for this entry
+                                entry_known_path = self._route_exists(entry_path)
+                                entry_kw_hits = 0
+                                if not entry_known_path and not is_path_exempt(entry_path):
+                                    entry_kw_hits = sum(1 for kw in self.malicious_keywords if kw in entry_path.lower())
+                                recent_kw_hits.append(entry_kw_hits)
+                                
+                                # Count 404s and scanning 404s
+                                if entry_status == 404:
+                                    recent_404s += 1
+                                    if self._is_scanning_path(entry_path):
+                                        scanning_404s += 1
+                                
+                                # Calculate burst for this entry
+                                entry_burst = sum(1 for (t, _, _, _) in recent_data if abs(entry_time - t) <= 10)
+                                recent_burst_counts.append(entry_burst)
+                            
+                            # Calculate averages and metrics
+                            avg_kw_hits = sum(recent_kw_hits) / len(recent_kw_hits) if recent_kw_hits else 0
+                            max_404s = recent_404s
+                            avg_burst = sum(recent_burst_counts) / len(recent_burst_counts) if recent_burst_counts else 0
+                            total_requests = len(recent_data)
+                            legitimate_404s = max_404s - scanning_404s
+                            
+                            # Enhanced blocking logic - don't block legitimate behavior
+                            should_block = not (
+                                avg_kw_hits < 3 and           # Allow some keyword hits
+                                scanning_404s < 5 and        # Focus on scanning 404s
+                                legitimate_404s < 20 and     # Allow legitimate 404s
+                                avg_burst < 25 and           # Allow higher burst
+                                total_requests < 150         # Allow more total requests
+                            )
+
+                            # High burst alone is not enough to block if there are no signals of abuse
+                            if avg_kw_hits == 0 and max_404s == 0:
+                                should_block = False
                         
                         if should_block:
                             reason = f"AI anomaly + scanning behavior (404s:{max_404s}, scanning:{scanning_404s}, kw:{avg_kw_hits:.1f}, burst:{avg_burst:.1f})"

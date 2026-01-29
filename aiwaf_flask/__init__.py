@@ -8,6 +8,7 @@ from .header_validation_middleware import HeaderValidationMiddleware
 from .anomaly_middleware import AIAnomalyMiddleware
 from .uuid_tamper_middleware import UUIDTamperMiddleware
 from .logging_middleware import AIWAFLoggingMiddleware, analyze_access_logs
+from .middleware_logger import AIWAFLoggerMiddleware
 from .geo_block_middleware import GeoBlockMiddleware
 
 # Exemption decorators for fine-grained control
@@ -116,6 +117,7 @@ class AIWAF:
             'AIWAF_RATE_FLOOD': 200,
             'AIWAF_MIN_FORM_TIME': 1.0,
             'AIWAF_USE_CSV': True,
+            'AIWAF_USE_RUST': False,
             'AIWAF_DATA_DIR': 'aiwaf_data',
             'AIWAF_LOG_DIR': 'logs',
             'AIWAF_ENABLE_LOGGING': True,

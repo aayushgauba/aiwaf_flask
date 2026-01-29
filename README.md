@@ -61,6 +61,27 @@ The AI anomaly detection middleware requires additional dependencies:
 pip install numpy>=1.20.0 scikit-learn>=1.0.0
 ```
 
+### Rust Acceleration (Optional)
+
+AIWAF includes an optional Rust extension (`aiwaf_rust`) that accelerates:
+- **Header validation**
+- **Training feature extraction**
+- **Recent-behavior analysis** used by AI anomaly detection
+
+Enable it with:
+
+```python
+app.config["AIWAF_USE_RUST"] = True
+```
+
+Build the extension locally (from repo root):
+
+```bash
+maturin develop --release
+```
+
+If the Rust extension isn’t available, AIWAF automatically falls back to the Python implementations.
+
 ## Quick Start
 
 ### Basic Setup (All Middlewares)

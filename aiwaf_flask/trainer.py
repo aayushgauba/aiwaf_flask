@@ -39,6 +39,7 @@ from .storage import get_exemption_store, get_keyword_store, _get_storage_mode, 
 from .blacklist_manager import BlacklistManager
 from .utils import is_exempt, is_path_exempt
 from .geoip import lookup_country_name
+from . import rust_backend
 
 # ─────────── Configuration ───────────
 DEFAULT_LOG_DIR = 'logs'
@@ -550,31 +551,54 @@ class FlaskAITrainer:
         if blocked_404_count > 0:
             print(f"🚫 Blocked {blocked_404_count} IPs for excessive 404 errors")
         
-        # Prepare feature data
+        # Prepare feature data (prefer Rust if enabled)
         feature_dicts = []
-        for r in parsed:
-            ip = r["ip"]
-            burst = sum(
-                1 for t in ip_times[ip]
-                if (r["timestamp"] - t).total_seconds() <= 10
-            )
-            total404 = ip_404[ip]
-            known_path = self.path_exists_in_flask(r["path"])
-            kw_hits = 0
-            if not known_path and not is_path_exempt(r["path"]):
-                kw_hits = sum(k in r["path"].lower() for k in STATIC_KW)
-            
-            status_idx = STATUS_IDX.index(r["status"]) if r["status"] in STATUS_IDX else -1
-            
-            feature_dicts.append({
-                "ip": ip,
-                "path_len": len(r["path"]),
-                "kw_hits": kw_hits,
-                "resp_time": r["response_time"],
-                "status_idx": status_idx,
-                "burst_count": burst,
-                "total_404": total404,
-            })
+        use_rust = self.get_config("AIWAF_USE_RUST", False) and rust_backend.rust_available()
+        if use_rust:
+            records = []
+            for r in parsed:
+                known_path = self.path_exists_in_flask(r["path"])
+                kw_check = not known_path and not is_path_exempt(r["path"])
+                status_idx = STATUS_IDX.index(r["status"]) if r["status"] in STATUS_IDX else -1
+                records.append({
+                    "ip": r["ip"],
+                    "path_lower": r["path"].lower(),
+                    "path_len": len(r["path"]),
+                    "timestamp": r["timestamp"].timestamp(),
+                    "response_time": r["response_time"],
+                    "status_idx": status_idx,
+                    "kw_check": kw_check,
+                    "total_404": ip_404[r["ip"]],
+                })
+
+            rust_features = rust_backend.extract_features(records, STATIC_KW)
+            if rust_features:
+                feature_dicts = rust_features
+
+        if not feature_dicts:
+            for r in parsed:
+                ip = r["ip"]
+                burst = sum(
+                    1 for t in ip_times[ip]
+                    if (r["timestamp"] - t).total_seconds() <= 10
+                )
+                total404 = ip_404[ip]
+                known_path = self.path_exists_in_flask(r["path"])
+                kw_hits = 0
+                if not known_path and not is_path_exempt(r["path"]):
+                    kw_hits = sum(k in r["path"].lower() for k in STATIC_KW)
+                
+                status_idx = STATUS_IDX.index(r["status"]) if r["status"] in STATUS_IDX else -1
+                
+                feature_dicts.append({
+                    "ip": ip,
+                    "path_len": len(r["path"]),
+                    "kw_hits": kw_hits,
+                    "resp_time": r["response_time"],
+                    "status_idx": status_idx,
+                    "burst_count": burst,
+                    "total_404": total404,
+                })
         
         if not feature_dicts:
             print("❌ Nothing to train on – no valid log entries.")

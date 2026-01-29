@@ -4,6 +4,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
 from flask import Flask
+from flask.testing import FlaskClient
 from aiwaf_flask.db_models import db
 
 @pytest.fixture
@@ -41,3 +42,24 @@ def app_context(app):
     """Create an application context."""
     with app.app_context():
         yield app
+
+
+@pytest.fixture(autouse=True)
+def _default_header_injection(monkeypatch):
+    """Inject browser-like headers so header validation doesn't block tests."""
+    default_headers = {
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+        "Accept-Encoding": "gzip, deflate",
+        "Connection": "keep-alive",
+    }
+    original_open = FlaskClient.open
+
+    def open_with_defaults(self, *args, **kwargs):
+        headers = kwargs.pop("headers", {})
+        merged = {**default_headers, **headers}
+        kwargs["headers"] = merged
+        return original_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(FlaskClient, "open", open_with_defaults)
+    yield
