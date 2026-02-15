@@ -7,9 +7,6 @@ recursive-include aiwaf_flask *.pkl
 recursive-include aiwaf_flask *.json
 recursive-include aiwaf_flask/resources *
 recursive-include aiwaf_flask/geolock *
-include Cargo.toml
-include Cargo.lock
-recursive-include src *.rs
 recursive-exclude tests *
 recursive-exclude * __pycache__
 recursive-exclude * *.py[co]

@@ -304,6 +304,34 @@ class AIWAFManager:
         except Exception as e:
             print(f"❌ Error reading path exemptions: {e}")
             return {}
+
+    def whois_lookup(self, target: str) -> bool:
+        """Perform WHOIS lookup without touching request blocking path."""
+        try:
+            from .aiwaf_whois import run_whois_lookup
+        except Exception:
+            print("❌ WHOIS helper unavailable")
+            return False
+
+        try:
+            result = run_whois_lookup(target)
+        except ModuleNotFoundError:
+            print("❌ python-whois is not installed. Install with: pip install python-whois")
+            return False
+        except Exception as e:
+            print(f"❌ WHOIS lookup failed: {e}")
+            return False
+
+        print("WHOIS result:")
+        if isinstance(result, dict):
+            print(json.dumps(result, indent=2, default=str))
+        else:
+            data = getattr(result, "__dict__", None)
+            if isinstance(data, dict) and data:
+                print(json.dumps(data, indent=2, default=str))
+            else:
+                print(str(result))
+        return True
     
     def add_to_whitelist(self, ip: str) -> bool:
         """Add IP to whitelist."""
@@ -1123,6 +1151,10 @@ def main():
     # Route shell command
     route_shell_parser = subparsers.add_parser('route-shell', help='Interactive route browser for exemptions')
     route_shell_parser.add_argument('--app', required=True, help='Flask app import path (module:app)')
+
+    # WHOIS command
+    whois_parser = subparsers.add_parser('whois', help='Run WHOIS ownership lookup')
+    whois_parser.add_argument('target', help='Domain or IP address')
     
     args = parser.parse_args()
     
@@ -1240,6 +1272,9 @@ def main():
             print(f"❌ Failed to load app: {e}")
             return
         _route_shell(app, manager)
+
+    elif args.command == 'whois':
+        manager.whois_lookup(args.target)
 
 if __name__ == '__main__':
     main()

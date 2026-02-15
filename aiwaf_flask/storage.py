@@ -3,6 +3,7 @@
 import csv
 import os
 import threading
+import json
 import time
 import logging
 import random
@@ -176,7 +177,7 @@ def _ensure_csv_files():
         # Create CSV files if they don't exist
         files_to_create = [
             (data_dir / WHITELIST_CSV, ['ip', 'added_date']),
-            (data_dir / BLACKLIST_CSV, ['ip', 'reason', 'added_date']),
+            (data_dir / BLACKLIST_CSV, ['ip', 'reason', 'added_date', 'extended_request_info']),
             (data_dir / KEYWORDS_CSV, ['keyword', 'added_date']),
             (data_dir / GEO_BLOCKED_COUNTRIES_CSV, ['country', 'added_date']),
             (data_dir / PATH_EXEMPTIONS_CSV, ['path', 'reason', 'added_date'])
@@ -290,7 +291,7 @@ def _read_csv_blacklist():
     
     return _safe_csv_operation(_read_operation)
 
-def _append_csv_blacklist(ip, reason):
+def _append_csv_blacklist(ip, reason, extended_request_info=None):
     """Append IP to blacklist CSV with thread safety."""
     def _append_operation():
         _ensure_csv_files()
@@ -307,7 +308,13 @@ def _append_csv_blacklist(ip, reason):
             
             with _file_lock(csv_file, 'a') as f:
                 writer = csv.writer(f)
-                writer.writerow([ip, reason, datetime.now().isoformat()])
+                info_json = ""
+                if extended_request_info:
+                    try:
+                        info_json = json.dumps(extended_request_info, separators=(",", ":"), ensure_ascii=False)
+                    except Exception:
+                        info_json = ""
+                writer.writerow([ip, reason, datetime.now().isoformat(), info_json])
                 logger.debug(f"Added IP {ip} to blacklist with reason: {reason}")
     
     return _safe_csv_operation(_append_operation)
@@ -523,9 +530,9 @@ def _rewrite_csv_blacklist(blacklist):
             # Write to temporary file first
             with _file_lock(temp_file, 'w') as f:
                 writer = csv.writer(f)
-                writer.writerow(['ip', 'reason', 'added_date'])
+                writer.writerow(['ip', 'reason', 'added_date', 'extended_request_info'])
                 for ip, reason in blacklist.items():
-                    writer.writerow([ip, reason, datetime.now().isoformat()])
+                    writer.writerow([ip, reason, datetime.now().isoformat(), ""])
             
             # Atomically replace the original file
             if os.name == 'nt':  # Windows
@@ -668,7 +675,7 @@ def is_ip_blacklisted(ip):
     else:
         return ip in _memory_blacklist
 
-def add_ip_blacklist(ip, reason=None):
+def add_ip_blacklist(ip, reason=None, extended_request_info=None):
     """Add IP to blacklist."""
     if is_ip_blacklisted(ip):
         return
@@ -678,14 +685,20 @@ def add_ip_blacklist(ip, reason=None):
     
     if storage_mode == 'database':
         try:
-            db.session.add(BlacklistedIP(ip=ip, reason=reason))
+            db.session.add(
+                BlacklistedIP(
+                    ip=ip,
+                    reason=reason,
+                    extended_request_info=extended_request_info,
+                )
+            )
             db.session.commit()
             return
         except Exception:
             storage_mode = 'csv'
     
     if storage_mode == 'csv':
-        _append_csv_blacklist(ip, reason)
+        _append_csv_blacklist(ip, reason, extended_request_info=extended_request_info)
     else:
         _memory_blacklist[ip] = reason
 

@@ -311,7 +311,7 @@ class TestConcurrentCSVAccess:
         with open(blacklist_file, 'r') as f:
             lines = f.readlines()
             assert len(lines) > 1, "Blacklist file appears corrupted"
-            assert 'ip,reason,added_date' in lines[0], "Blacklist header corrupted"
+            assert 'ip,reason,added_date,extended_request_info' in lines[0], "Blacklist header corrupted"
         
         # Check keywords file
         keywords_file = data_dir / "keywords.csv"

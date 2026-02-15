@@ -125,7 +125,7 @@ def test_csv_file_creation(csv_app_context):
     with open(blacklist_file, 'r') as f:
         reader = csv.reader(f)
         headers = next(reader)
-        assert headers == ['ip', 'reason', 'added_date']
+        assert headers == ['ip', 'reason', 'added_date', 'extended_request_info']
     
     # Check keywords file
     keywords_file = data_dir / 'keywords.csv'

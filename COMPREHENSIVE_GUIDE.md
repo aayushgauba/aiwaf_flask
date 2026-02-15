@@ -42,6 +42,9 @@ pip install aiwaf-flask
 # With AI anomaly detection features
 pip install aiwaf-flask[ai]
 
+# With optional Rust acceleration package
+pip install aiwaf-flask[rust]
+
 # Full installation (AI + development tools)
 pip install aiwaf-flask[all]
 ```
@@ -130,6 +133,7 @@ app.config.update({
     'AIWAF_RATE_FLOOD': 200,                # Auto-block threshold
     'AIWAF_HONEYPOT_DELAY': 0.5,            # Honeypot timing sensitivity
     'AIWAF_MIN_FORM_TIME': 1.0,             # Minimum form submission time
+    'AIWAF_HONEYPOT_SKIP_AUTHENTICATED': True,  # Default: skip honeypot for authenticated users
     
     # === AI Training Settings ===
     'AIWAF_MIN_AI_LOGS': 10000,             # Minimum logs for AI training
@@ -350,6 +354,7 @@ python -m aiwaf_flask.cli remove keyword "dashboard"
 app.config.update({
     'AIWAF_HONEYPOT_DELAY': 0.5,   # Sensitivity threshold
     'AIWAF_MIN_FORM_TIME': 1.0,    # Minimum human time
+    'AIWAF_HONEYPOT_SKIP_AUTHENTICATED': True,  # Default behavior
 })
 ```
 

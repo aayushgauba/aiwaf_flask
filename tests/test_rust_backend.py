@@ -1,11 +1,14 @@
 import os
 import tempfile
+import importlib.util
 from pathlib import Path
 
 import pytest
 
 from aiwaf_flask import rust_backend
 from aiwaf_flask.header_validation_middleware import validate_headers_python
+
+RUST_PACKAGE_INSTALLED = importlib.util.find_spec("aiwaf_rust") is not None
 
 
 def test_python_header_validation_blocks_missing():
@@ -14,6 +17,17 @@ def test_python_header_validation_blocks_missing():
     assert reason and "Missing required headers" in reason
 
 
+def test_python_header_validation_allows_head_with_override():
+    environ = {}
+    reason = validate_headers_python(
+        environ,
+        method="HEAD",
+        config_required_headers={"HEAD": []},
+    )
+    assert reason is None
+
+
+@pytest.mark.skipif(not RUST_PACKAGE_INSTALLED, reason="aiwaf_rust package not installed")
 @pytest.mark.skipif(not rust_backend.rust_available(), reason="Rust extension not available")
 def test_rust_validate_headers_blocks_missing():
     environ = {"HTTP_USER_AGENT": "Mozilla/5.0"}
@@ -21,6 +35,7 @@ def test_rust_validate_headers_blocks_missing():
     assert reason and "Missing required headers" in reason
 
 
+@pytest.mark.skipif(not RUST_PACKAGE_INSTALLED, reason="aiwaf_rust package not installed")
 @pytest.mark.skipif(not rust_backend.rust_available(), reason="Rust extension not available")
 def test_rust_extract_features_basic():
     records = [
@@ -61,6 +76,7 @@ def test_rust_extract_features_basic():
     assert second["kw_hits"] == 0
 
 
+@pytest.mark.skipif(not RUST_PACKAGE_INSTALLED, reason="aiwaf_rust package not installed")
 @pytest.mark.skipif(not rust_backend.rust_available(), reason="Rust extension not available")
 def test_rust_analyze_recent_behavior_basic():
     entries = [
@@ -76,6 +92,7 @@ def test_rust_analyze_recent_behavior_basic():
     assert isinstance(result["should_block"], bool)
 
 
+@pytest.mark.skipif(not RUST_PACKAGE_INSTALLED, reason="aiwaf_rust package not installed")
 @pytest.mark.skipif(not rust_backend.rust_available(), reason="Rust extension not available")
 def test_rust_write_csv_log_deprecated():
     temp_dir = Path(tempfile.mkdtemp(prefix="aiwaf_rust_test_"))

@@ -116,6 +116,7 @@ class AIWAF:
             'AIWAF_RATE_MAX': 100,
             'AIWAF_RATE_FLOOD': 200,
             'AIWAF_MIN_FORM_TIME': 1.0,
+            'AIWAF_HONEYPOT_SKIP_AUTHENTICATED': True,
             'AIWAF_USE_CSV': True,
             'AIWAF_USE_RUST': False,
             'AIWAF_DATA_DIR': 'aiwaf_data',

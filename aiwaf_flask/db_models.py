@@ -11,6 +11,7 @@ class BlacklistedIP(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     ip = db.Column(db.String(45), unique=True, nullable=False)
     reason = db.Column(db.String(255))
+    extended_request_info = db.Column(db.JSON, nullable=True)
 
 class Keyword(db.Model):
     id = db.Column(db.Integer, primary_key=True)

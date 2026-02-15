@@ -24,13 +24,18 @@ def test_whitelisted_ip_unique_constraint(app_context):
 
 def test_blacklisted_ip_creation(app_context):
     """Test creating a blacklisted IP."""
-    ip_entry = BlacklistedIP(ip='10.0.0.1', reason='suspicious activity')
+    ip_entry = BlacklistedIP(
+        ip='10.0.0.1',
+        reason='suspicious activity',
+        extended_request_info={"path": "/login", "method": "POST"},
+    )
     db.session.add(ip_entry)
     db.session.commit()
     
     assert ip_entry.id is not None
     assert ip_entry.ip == '10.0.0.1'
     assert ip_entry.reason == 'suspicious activity'
+    assert ip_entry.extended_request_info["path"] == "/login"
 
 def test_blacklisted_ip_unique_constraint(app_context):
     """Test that duplicate IPs are not allowed in blacklist."""

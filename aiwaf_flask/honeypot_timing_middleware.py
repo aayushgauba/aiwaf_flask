@@ -7,6 +7,17 @@ from .exemption_decorators import should_apply_middleware
 
 _aiwaf_cache = {}
 
+
+def _is_authenticated_request() -> bool:
+    """Best-effort auth detection without introducing hard dependencies."""
+    try:
+        from flask_login import current_user  # type: ignore
+
+        return bool(getattr(current_user, "is_authenticated", False))
+    except Exception:
+        return False
+
+
 class HoneypotTimingMiddleware:
     def __init__(self, app=None):
         self.app = app
@@ -19,6 +30,9 @@ class HoneypotTimingMiddleware:
             # Check exemption status first - skip if exempt from honeypot detection
             if not should_apply_middleware('honeypot'):
                 return None  # Allow request to proceed without honeypot timing checks
+
+            if app.config.get("AIWAF_HONEYPOT_SKIP_AUTHENTICATED", True) and _is_authenticated_request():
+                return None
             
             ip = get_ip()
             now = time.time()

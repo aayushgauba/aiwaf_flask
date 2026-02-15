@@ -46,8 +46,14 @@ pip install aiwaf-flask
 # With AI anomaly detection features
 pip install aiwaf-flask[ai]
 
+# With optional Rust acceleration package
+pip install aiwaf-flask[rust]
+
 # Full installation (AI + development tools)
 pip install aiwaf-flask[all]
+
+# Optional WHOIS CLI support
+pip install aiwaf-flask[whois]
 ```
 
 ### AI Dependencies
@@ -63,10 +69,16 @@ pip install numpy>=1.20.0 scikit-learn>=1.0.0
 
 ### Rust Acceleration (Optional)
 
-AIWAF includes an optional Rust extension (`aiwaf_rust`) that accelerates:
+AIWAF uses an optional separately released package (`aiwaf-rust`, import name `aiwaf_rust`) that accelerates:
 - **Header validation**
 - **Training feature extraction**
 - **Recent-behavior analysis** used by AI anomaly detection
+
+Install it via extras:
+
+```bash
+pip install aiwaf-flask[rust]
+```
 
 Enable it with:
 
@@ -74,13 +86,41 @@ Enable it with:
 app.config["AIWAF_USE_RUST"] = True
 ```
 
-Build the extension locally (from repo root):
+If the Rust extension isn’t available, AIWAF automatically falls back to the Python implementations.
 
-```bash
-maturin develop --release
+### Method-Specific Required Headers
+
+You can override required headers per HTTP method (for example to allow email link scanners that probe with `HEAD`):
+
+```python
+app.config["AIWAF_REQUIRED_HEADERS"] = {
+    "GET": ["HTTP_USER_AGENT", "HTTP_ACCEPT"],
+    "HEAD": [],
+}
 ```
 
-If the Rust extension isn’t available, AIWAF automatically falls back to the Python implementations.
+### Extended Request Info on Blocks (Optional)
+
+When enabled, blacklist entries can store `extended_request_info` metadata (URL, path, query, method, host, selected headers) without changing the original block `reason`.
+
+```python
+app.config["AIWAF_CAPTURE_EXTENDED_REQUEST_INFO"] = True
+app.config["AIWAF_EXTENDED_REQUEST_INFO_HEADERS"] = [
+    "User-Agent", "Accept", "Authorization"
+]
+app.config["AIWAF_EXTENDED_REQUEST_INFO_REDACT_HEADERS"] = [
+    "Authorization", "Cookie"
+]
+app.config["AIWAF_EXTENDED_REQUEST_INFO_MAX_BYTES"] = 4096
+```
+
+### WHOIS Command
+
+Run WHOIS ownership lookups directly from CLI:
+
+```bash
+aiwaf whois example.com
+```
 
 ## Quick Start
 
@@ -482,6 +522,7 @@ app.config['AIWAF_RATE_FLOOD'] = 200      # Auto-block threshold
 
 # Honeypot Protection
 app.config['AIWAF_MIN_FORM_TIME'] = 2.0   # Minimum form submission time
+app.config['AIWAF_HONEYPOT_SKIP_AUTHENTICATED'] = True  # Skip honeypot for logged-in users
 
 # AI Anomaly Detection
 app.config['AIWAF_WINDOW_SECONDS'] = 60   # Analysis window for behavior patterns

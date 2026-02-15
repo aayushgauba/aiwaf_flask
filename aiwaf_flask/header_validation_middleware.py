@@ -50,6 +50,16 @@ SUSPICIOUS_UA = [
     ("mozilla/4.0$", re.compile(r"mozilla/4\.0$", re.IGNORECASE)),
 ]
 
+DEFAULT_REQUIRED_HEADERS = {
+    "GET": ["HTTP_USER_AGENT", "HTTP_ACCEPT"],
+    "POST": ["HTTP_USER_AGENT", "HTTP_ACCEPT"],
+    "PUT": ["HTTP_USER_AGENT", "HTTP_ACCEPT"],
+    "PATCH": ["HTTP_USER_AGENT", "HTTP_ACCEPT"],
+    "DELETE": ["HTTP_USER_AGENT", "HTTP_ACCEPT"],
+    "OPTIONS": ["HTTP_USER_AGENT", "HTTP_ACCEPT"],
+    "HEAD": ["HTTP_USER_AGENT", "HTTP_ACCEPT"],
+}
+
 
 def _get_header(environ, key):
     value = environ.get(key, "")
@@ -83,12 +93,30 @@ def _check_user_agent(user_agent):
     return None
 
 
-def validate_headers_python(environ):
+def _resolve_required_headers(config_required_headers=None, method=None):
+    resolved = {k: list(v) for k, v in DEFAULT_REQUIRED_HEADERS.items()}
+    method_name = str(method or "GET").upper()
+    if isinstance(config_required_headers, dict):
+        for k, value in config_required_headers.items():
+            if not isinstance(value, list):
+                continue
+            resolved[str(k).upper()] = [str(item) for item in value if item]
+    return resolved.get(method_name, resolved["GET"])
+
+
+def _required_header_display_name(header_key):
+    return str(header_key).replace("HTTP_", "").replace("_", "-").lower()
+
+
+def validate_headers_python(environ, method="GET", config_required_headers=None):
+    required_headers = _resolve_required_headers(config_required_headers, method)
+    # Explicit empty list means this method is exempt from header validation checks.
+    if len(required_headers) == 0:
+        return None
     missing = []
-    if not _has_header(environ, "HTTP_USER_AGENT"):
-        missing.append("user-agent")
-    if not _has_header(environ, "HTTP_ACCEPT"):
-        missing.append("accept")
+    for header_key in required_headers:
+        if not _has_header(environ, header_key):
+            missing.append(_required_header_display_name(header_key))
     if missing:
         return f"Missing required headers: {', '.join(missing)}"
 
@@ -157,17 +185,26 @@ class HeaderValidationMiddleware:
                 return None  # Allow request to proceed
             
             ip = get_ip()
+            req_method = (request.method or "GET").upper()
+            configured_required = current_app.config.get("AIWAF_REQUIRED_HEADERS")
 
             use_rust = (
                 current_app.config.get("AIWAF_USE_RUST", False)
                 and current_app.config.get("AIWAF_USE_CSV", True)
                 and rust_backend.rust_available()
             )
+            effective_required_headers = _resolve_required_headers(configured_required, req_method)
+            default_required_headers = _resolve_required_headers(None, req_method)
+            has_method_override = effective_required_headers != default_required_headers
 
-            if use_rust:
+            if use_rust and not has_method_override:
                 reason = rust_backend.validate_headers(request.environ)
             else:
-                reason = validate_headers_python(request.environ)
+                reason = validate_headers_python(
+                    request.environ,
+                    method=req_method,
+                    config_required_headers=configured_required,
+                )
 
             if reason:
                 BlacklistManager.block(ip, reason)

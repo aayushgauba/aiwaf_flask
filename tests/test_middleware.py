@@ -214,3 +214,39 @@ def test_honeypot_timing(mock_time, middleware_app):
     mock_time.return_value = 1000.3  # 0.3 seconds later (< 0.5 min time)
     response = client.post('/test_post')
     assert response.status_code == 403
+
+
+@patch('time.time')
+def test_honeypot_timing_skips_authenticated_requests(mock_time, middleware_app, monkeypatch):
+    """Authenticated requests can bypass honeypot timing checks when enabled."""
+    from aiwaf_flask import honeypot_timing_middleware as hm
+
+    middleware_app.config['AIWAF_HONEYPOT_SKIP_AUTHENTICATED'] = True
+    monkeypatch.setattr(hm, "_is_authenticated_request", lambda: True)
+
+    client = middleware_app.test_client()
+
+    mock_time.return_value = 2000.0
+    client.get('/test_post')
+
+    mock_time.return_value = 2000.1
+    response = client.post('/test_post')
+    assert response.status_code == 200
+
+
+@patch('time.time')
+def test_honeypot_timing_auth_bypass_can_be_disabled(mock_time, middleware_app, monkeypatch):
+    """When auth bypass is disabled, honeypot timing still blocks fast posts."""
+    from aiwaf_flask import honeypot_timing_middleware as hm
+
+    middleware_app.config['AIWAF_HONEYPOT_SKIP_AUTHENTICATED'] = False
+    monkeypatch.setattr(hm, "_is_authenticated_request", lambda: True)
+
+    client = middleware_app.test_client()
+
+    mock_time.return_value = 3000.0
+    client.get('/test_post')
+
+    mock_time.return_value = 3000.1
+    response = client.post('/test_post')
+    assert response.status_code == 403

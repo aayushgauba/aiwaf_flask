@@ -1,6 +1,7 @@
 """Storage functions for AIWAF Flask with CSV, database, and in-memory fallback."""
 
 import csv
+import json
 import os
 from datetime import datetime
 from pathlib import Path
@@ -68,7 +69,7 @@ def _ensure_csv_files():
     if not blacklist_file.exists():
         with open(blacklist_file, 'w', newline='') as f:
             writer = csv.writer(f)
-            writer.writerow(['ip', 'reason', 'added_date'])
+            writer.writerow(['ip', 'reason', 'added_date', 'extended_request_info'])
     
     if not keywords_file.exists():
         with open(keywords_file, 'w', newline='') as f:
@@ -119,7 +120,7 @@ def _read_csv_blacklist():
     
     return blacklist
 
-def _append_csv_blacklist(ip, reason):
+def _append_csv_blacklist(ip, reason, extended_request_info=None):
     """Append IP to blacklist CSV."""
     _ensure_csv_files()
     csv_file = Path(_get_data_dir()) / BLACKLIST_CSV
@@ -127,7 +128,13 @@ def _append_csv_blacklist(ip, reason):
     try:
         with open(csv_file, 'a', newline='') as f:
             writer = csv.writer(f)
-            writer.writerow([ip, reason, datetime.now().isoformat()])
+            info_json = ""
+            if extended_request_info:
+                try:
+                    info_json = json.dumps(extended_request_info, separators=(",", ":"), ensure_ascii=False)
+                except Exception:
+                    info_json = ""
+            writer.writerow([ip, reason, datetime.now().isoformat(), info_json])
     except Exception:
         pass
 
@@ -167,9 +174,9 @@ def _rewrite_csv_blacklist(blacklist):
     try:
         with open(csv_file, 'w', newline='') as f:
             writer = csv.writer(f)
-            writer.writerow(['ip', 'reason', 'added_date'])
+            writer.writerow(['ip', 'reason', 'added_date', 'extended_request_info'])
             for ip, reason in blacklist.items():
-                writer.writerow([ip, reason, datetime.now().isoformat()])
+                writer.writerow([ip, reason, datetime.now().isoformat(), ""])
     except Exception:
         pass
 
@@ -246,7 +253,7 @@ def is_ip_blacklisted(ip):
     else:
         return ip in _memory_blacklist
 
-def add_ip_blacklist(ip, reason=None):
+def add_ip_blacklist(ip, reason=None, extended_request_info=None):
     """Add IP to blacklist."""
     if is_ip_blacklisted(ip):
         return
@@ -256,14 +263,20 @@ def add_ip_blacklist(ip, reason=None):
     
     if storage_mode == 'database':
         try:
-            db.session.add(BlacklistedIP(ip=ip, reason=reason))
+            db.session.add(
+                BlacklistedIP(
+                    ip=ip,
+                    reason=reason,
+                    extended_request_info=extended_request_info,
+                )
+            )
             db.session.commit()
             return
         except Exception:
             storage_mode = 'csv'
     
     if storage_mode == 'csv':
-        _append_csv_blacklist(ip, reason)
+        _append_csv_blacklist(ip, reason, extended_request_info=extended_request_info)
     else:
         _memory_blacklist[ip] = reason
 

@@ -6,6 +6,15 @@ from functools import wraps
 # Dummy cache for demonstration (replace with Flask-Caching or Redis in production)
 _aiwaf_cache = {}
 
+
+def _is_authenticated_request():
+    try:
+        from flask_login import current_user  # type: ignore
+
+        return bool(getattr(current_user, "is_authenticated", False))
+    except Exception:
+        return False
+
 def get_ip():
     xff = request.headers.get("X-Forwarded-For")
     if xff:
@@ -55,7 +64,9 @@ class AIWAF:
             if len(timestamps) > max_req:
                 return jsonify({"error": "too_many_requests"}), 429
             # Honeypot timing (simple demo)
-            if request.method == "POST":
+            if app.config.get("AIWAF_HONEYPOT_SKIP_AUTHENTICATED", True) and _is_authenticated_request():
+                pass
+            elif request.method == "POST":
                 get_time = _aiwaf_cache.get(f"honeypot_get:{ip}")
                 if get_time is not None:
                     time_diff = now - get_time

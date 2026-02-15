@@ -11,7 +11,7 @@ with open(os.path.join(this_directory, 'README.md'), encoding='utf-8') as f:
 
 setup(
     name="aiwaf-flask",
-    version="0.1.5",
+    version="0.1.6",
     author="Aayush Gauba",
     author_email="gauba.aayush@gmail.com",
     description="Advanced AI-powered Web Application Firewall for Flask with intelligent threat detection, rate limiting, IP blocking, and real-time protection against web attacks",
@@ -56,6 +56,12 @@ setup(
         "geo": [
             "geoip2>=4.0.0",
         ],
+        "rust": [
+            "aiwaf-rust>=0.1.0",
+        ],
+        "whois": [
+            "python-whois>=0.9.0",
+        ],
         "dev": [
             "pytest>=7.0.0",
             "flask-testing>=0.8.1",
@@ -68,6 +74,8 @@ setup(
             "pytest>=7.0.0",
             "flask-testing>=0.8.1",
             "pytest-cov>=4.0.0",
+            "aiwaf-rust>=0.1.0",
+            "python-whois>=0.9.0",
         ],
     },
     keywords=[
@@ -79,6 +87,7 @@ setup(
             'aiwaf-console=aiwaf_flask.cli:main',
             'aiwaf=aiwaf_flask.cli:main',
             'aiwaf-train=train_aiwaf:main',
+            'aiwaf-whois=aiwaf_flask.whois_cli:main',
         ],
     },
     package_data={

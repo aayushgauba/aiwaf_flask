@@ -31,9 +31,15 @@ def add_ip_whitelist(ip):
 def is_ip_blacklisted(ip):
     return BlacklistedIP.query.filter_by(ip=ip).first() is not None
 
-def add_ip_blacklist(ip, reason=None):
+def add_ip_blacklist(ip, reason=None, extended_request_info=None):
     if not is_ip_blacklisted(ip):
-        db.session.add(BlacklistedIP(ip=ip, reason=reason))
+        db.session.add(
+            BlacklistedIP(
+                ip=ip,
+                reason=reason,
+                extended_request_info=extended_request_info,
+            )
+        )
         db.session.commit()
 
 def remove_ip_blacklist(ip):

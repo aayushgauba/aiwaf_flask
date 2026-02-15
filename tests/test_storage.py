@@ -1,6 +1,7 @@
 import pytest
 import tempfile
 import shutil
+from pathlib import Path
 from aiwaf_flask.storage import (
     is_ip_whitelisted, add_ip_whitelist,
     is_ip_blacklisted, add_ip_blacklist, remove_ip_blacklist,
@@ -131,6 +132,16 @@ def test_csv_storage_blacklist(csv_app_context):
     # Test removal
     remove_ip_blacklist(ip)
     assert not is_ip_blacklisted(ip)
+
+
+def test_csv_storage_blacklist_extended_request_info_column(csv_app_context):
+    ip = "10.10.10.2"
+    add_ip_blacklist(ip, "CSV extended", extended_request_info={"path": "/login"})
+
+    csv_file = Path(csv_app_context.config["AIWAF_DATA_DIR"]) / "blacklist.csv"
+    content = csv_file.read_text(encoding="utf-8")
+    header = content.splitlines()[0]
+    assert "extended_request_info" in header
 
 def test_csv_storage_keywords(csv_app_context):
     """Test CSV storage for keywords."""
