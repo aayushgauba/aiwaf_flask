@@ -12,6 +12,7 @@ import gzip
 import re
 import csv
 import json
+import logging
 from datetime import datetime, timedelta
 from collections import defaultdict, Counter
 from pathlib import Path
@@ -40,6 +41,8 @@ from .blacklist_manager import BlacklistManager
 from .utils import is_exempt, is_path_exempt
 from .geoip import lookup_country_name
 from . import rust_backend
+
+logger = logging.getLogger(__name__)
 
 # ─────────── Configuration ───────────
 DEFAULT_LOG_DIR = 'logs'
@@ -160,7 +163,7 @@ class FlaskAITrainer:
             keyword_store.remove_keyword(token)
         
         if exempt_tokens:
-            print(f"🧹 Removed {len(exempt_tokens)} exempt keywords from learning: {list(exempt_tokens)[:10]}")
+            logger.info(f"🧹 Removed {len(exempt_tokens)} exempt keywords from learning: {list(exempt_tokens)[:10]}")
     
     def get_legitimate_keywords(self) -> Set[str]:
         """Get all legitimate keywords that shouldn't be learned as suspicious"""
@@ -251,7 +254,7 @@ class FlaskAITrainer:
                         keywords.add(segment)
             
         except Exception as e:
-            print(f"Warning: Could not extract Flask route keywords: {e}")
+            logger.info(f"Warning: Could not extract Flask route keywords: {e}")
         
         # Filter out common/generic words
         exclude_words = {
@@ -270,7 +273,7 @@ class FlaskAITrainer:
                 filtered_keywords.add(keyword)
         
         if filtered_keywords:
-            print(f"🔗 Extracted {len(filtered_keywords)} legitimate keywords from Flask routes")
+            logger.info(f"🔗 Extracted {len(filtered_keywords)} legitimate keywords from Flask routes")
         
         self._route_keywords = filtered_keywords
         return filtered_keywords
@@ -292,7 +295,7 @@ class FlaskAITrainer:
         
         for log_path in access_log_files:
             if os.path.exists(log_path):
-                print(f"📁 Reading logs from: {log_path}")
+                logger.info(f"📁 Reading logs from: {log_path}")
                 with open(log_path, "r", errors="ignore") as f:
                     lines.extend(f.readlines())
                 
@@ -314,7 +317,7 @@ class FlaskAITrainer:
         if not lines:
             lines = self._get_logs_from_json()
         
-        print(f"📊 Total log lines found: {len(lines)}")
+        logger.info(f"📊 Total log lines found: {len(lines)}")
         return lines
     
     def _get_logs_from_csv(self) -> List[str]:
@@ -346,9 +349,9 @@ class FlaskAITrainer:
                                           f'response-time={float(response_time)/1000}\n')
                                 lines.append(log_line)
                     
-                    print(f"📂 Loaded {len(lines)} entries from CSV: {csv_file}")
+                    logger.info(f"📂 Loaded {len(lines)} entries from CSV: {csv_file}")
                 except Exception as e:
-                    print(f"Warning: Could not read CSV file {csv_file}: {e}")
+                    logger.info(f"Warning: Could not read CSV file {csv_file}: {e}")
         
         return lines
     
@@ -384,9 +387,9 @@ class FlaskAITrainer:
                         except json.JSONDecodeError:
                             continue
                 
-                print(f"📄 Loaded entries from JSON: {json_file}")
+                logger.info(f"📄 Loaded entries from JSON: {json_file}")
             except Exception as e:
-                print(f"Warning: Could not read JSON file {json_file}: {e}")
+                logger.info(f"Warning: Could not read JSON file {json_file}: {e}")
         
         return lines
     
@@ -472,15 +475,15 @@ class FlaskAITrainer:
     
     def train(self, disable_ai: bool = False) -> None:
         """Enhanced training with improved keyword filtering and exemption handling"""
-        print("🚀 Starting AIWAF Flask enhanced training...")
+        logger.info("🚀 Starting AIWAF Flask enhanced training...")
         
         if not AI_AVAILABLE and not disable_ai:
-            print("⚠️  AI dependencies not available - switching to keyword-only mode")
-            print("   Install with: pip install aiwaf-flask[ai]")
+            logger.info("⚠️  AI dependencies not available - switching to keyword-only mode")
+            logger.info("   Install with: pip install aiwaf-flask[ai]")
             disable_ai = True
         
         if disable_ai:
-            print("🔤 AI model training disabled - keyword learning only")
+            logger.info("🔤 AI model training disabled - keyword learning only")
         
         # Remove exempt keywords first
         self.remove_exempt_keywords()
@@ -493,12 +496,12 @@ class FlaskAITrainer:
         
         raw_lines = self._read_all_logs()
         if not raw_lines:
-            print("❌ No log lines found – check AIWAF_LOG_DIR setting or log files.")
+            logger.info("❌ No log lines found – check AIWAF_LOG_DIR setting or log files.")
             return
         
         # Skip processing if we have too few entries
         if len(raw_lines) < 50:
-            print(f"⚠️  Only {len(raw_lines)} log entries found - need at least 50 for basic training")
+            logger.info(f"⚠️  Only {len(raw_lines)} log entries found - need at least 50 for basic training")
             return
         
         # Check if we have enough data for AI training
@@ -506,18 +509,18 @@ class FlaskAITrainer:
         force_ai = current_app.config.get('AIWAF_FORCE_AI', False)
         
         if not disable_ai and not force_ai and len(raw_lines) < min_ai_threshold:
-            print(f"⚠️  Only {len(raw_lines)} log entries found - need at least {min_ai_threshold} for AI training")
-            print("   Switching to keyword-only mode (use --force-ai to override or --disable-ai to suppress this warning)")
+            logger.info(f"⚠️  Only {len(raw_lines)} log entries found - need at least {min_ai_threshold} for AI training")
+            logger.info("   Switching to keyword-only mode (use --force-ai to override or --disable-ai to suppress this warning)")
             disable_ai = True
         elif not disable_ai and force_ai and len(raw_lines) < min_ai_threshold:
-            print(f"⚠️  Only {len(raw_lines)} log entries found (recommended: {min_ai_threshold}+) but forcing AI training")
+            logger.info(f"⚠️  Only {len(raw_lines)} log entries found (recommended: {min_ai_threshold}+) but forcing AI training")
         
         parsed = []
         ip_404 = defaultdict(int)
         ip_404_login = defaultdict(int)
         ip_times = defaultdict(list)
         
-        print(f"📋 Parsing {len(raw_lines)} log entries...")
+        logger.info(f"📋 Parsing {len(raw_lines)} log entries...")
         for line in raw_lines:
             rec = self._parse(line)
             if not rec:
@@ -530,11 +533,11 @@ class FlaskAITrainer:
                 else:
                     ip_404[rec["ip"]] += 1
         
-        print(f"✅ Successfully parsed {len(parsed)} log entries")
+        logger.info(f"✅ Successfully parsed {len(parsed)} log entries")
         
         # Check if we have enough data
         if len(parsed) < 50:
-            print(f"⚠️  Only {len(parsed)} valid entries parsed - need at least 50 for basic training")
+            logger.info(f"⚠️  Only {len(parsed)} valid entries parsed - need at least 50 for basic training")
             return
         
         # 404 flood blocking (only for non-login paths)
@@ -549,7 +552,7 @@ class FlaskAITrainer:
                     blocked_404_count += 1
         
         if blocked_404_count > 0:
-            print(f"🚫 Blocked {blocked_404_count} IPs for excessive 404 errors")
+            logger.info(f"🚫 Blocked {blocked_404_count} IPs for excessive 404 errors")
         
         # Prepare feature data (prefer Rust if enabled)
         feature_dicts = []
@@ -601,15 +604,15 @@ class FlaskAITrainer:
                 })
         
         if not feature_dicts:
-            print("❌ Nothing to train on – no valid log entries.")
+            logger.info("❌ Nothing to train on – no valid log entries.")
             return
         
-        print(f"🔢 Generated {len(feature_dicts)} feature vectors for training")
+        logger.info(f"🔢 Generated {len(feature_dicts)} feature vectors for training")
         
         # AI Model Training (optional)
         blocked_count = 0
         if not disable_ai and AI_AVAILABLE:
-            print("🤖 Training AI anomaly detection model...")
+            logger.info("🤖 Training AI anomaly detection model...")
             
             try:
                 df = pd.DataFrame(feature_dicts)
@@ -639,15 +642,15 @@ class FlaskAITrainer:
                     'framework': 'flask'
                 }
                 joblib.dump(model_data, model_path)
-                print(f"💾 Model saved: {model_path}")
-                print(f"📊 Trained on {len(X)} samples with scikit-learn v{sklearn.__version__}")
+                logger.info(f"💾 Model saved: {model_path}")
+                logger.info(f"📊 Trained on {len(X)} samples with scikit-learn v{sklearn.__version__}")
                 
                 # Check for anomalies and intelligently decide which IPs to block
                 preds = model.predict(X)
                 anomalous_ips = set(df.loc[preds == -1, "ip"])
                 
                 if anomalous_ips:
-                    print(f"🔍 Detected {len(anomalous_ips)} potentially anomalous IPs")
+                    logger.info(f"🔍 Detected {len(anomalous_ips)} potentially anomalous IPs")
                     
                     exemption_store = get_exemption_store()
                     
@@ -672,32 +675,32 @@ class FlaskAITrainer:
                             avg_burst < 15 and           # Not excessive burst activity
                             total_requests < 100         # Not excessive total requests
                         ):
-                            print(f"   ✅ {ip}: Anomalous but looks legitimate - NOT blocking")
+                            logger.info(f"   ✅ {ip}: Anomalous but looks legitimate - NOT blocking")
                             continue
 
                         # High burst alone should not trigger blocking
                         if avg_kw_hits == 0 and max_404s == 0:
-                            print(f"   ✅ {ip}: Burst-only anomaly - NOT blocking")
+                            logger.info(f"   ✅ {ip}: Burst-only anomaly - NOT blocking")
                             continue
                         
                         # Block if it shows clear signs of malicious behavior
                         BlacklistManager.block(ip, f"AI anomaly + suspicious patterns (kw:{avg_kw_hits:.1f}, 404s:{max_404s}, burst:{avg_burst:.1f})")
                         blocked_count += 1
-                        print(f"   🚫 {ip}: Blocked for suspicious behavior")
+                        logger.info(f"   🚫 {ip}: Blocked for suspicious behavior")
                     
-                    print(f"🎯 Blocked {blocked_count}/{len(anomalous_ips)} anomalous IPs")
+                    logger.info(f"🎯 Blocked {blocked_count}/{len(anomalous_ips)} anomalous IPs")
             
             except Exception as e:
-                print(f"❌ AI model training failed: {e}")
-                print("   Continuing with keyword learning only...")
+                logger.info(f"❌ AI model training failed: {e}")
+                logger.info("   Continuing with keyword learning only...")
                 disable_ai = True
         else:
-            print("🔤 AI model training skipped")
+            logger.info("🔤 AI model training skipped")
             if not disable_ai:
                 df = pd.DataFrame(feature_dicts)  # Still need df for some operations
         
         # Keyword Learning
-        print("📚 Learning suspicious keywords from logs...")
+        logger.info("📚 Learning suspicious keywords from logs...")
         
         tokens = Counter()
         legitimate_keywords = self.get_legitimate_keywords()
@@ -742,33 +745,33 @@ class FlaskAITrainer:
                 learned_from_paths.extend(example_paths[:2])
         
         # Training summary
-        print("\n" + "="*60)
+        logger.info("\n" + "="*60)
         if disable_ai:
-            print("🔤 AIWAF FLASK KEYWORD-ONLY TRAINING COMPLETE")
+            logger.info("🔤 AIWAF FLASK KEYWORD-ONLY TRAINING COMPLETE")
         else:
-            print("🤖 AIWAF FLASK ENHANCED TRAINING COMPLETE")
-        print("="*60)
-        print(f"📊 Training Data: {len(parsed)} log entries processed")
+            logger.info("🤖 AIWAF FLASK ENHANCED TRAINING COMPLETE")
+        logger.info("="*60)
+        logger.info(f"📊 Training Data: {len(parsed)} log entries processed")
         
         if not disable_ai and AI_AVAILABLE:
-            print(f"🤖 AI Model: Trained with {len(feature_cols) if 'feature_cols' in locals() else 'N/A'} features")
-            print(f"🚫 AI Blocked IPs: {blocked_count} suspicious IPs blocked")
+            logger.info(f"🤖 AI Model: Trained with {len(feature_cols) if 'feature_cols' in locals() else 'N/A'} features")
+            logger.info(f"🚫 AI Blocked IPs: {blocked_count} suspicious IPs blocked")
         else:
-            print(f"🔤 AI Model: Disabled (keyword learning only)")
-            print(f"🚫 AI Blocked IPs: 0 (AI blocking disabled)")
+            logger.info(f"🔤 AI Model: Disabled (keyword learning only)")
+            logger.info(f"🚫 AI Blocked IPs: 0 (AI blocking disabled)")
         
-        print(f"📚 Keywords: {len(filtered_tokens)} new suspicious keywords learned")
+        logger.info(f"📚 Keywords: {len(filtered_tokens)} new suspicious keywords learned")
         if filtered_tokens:
-            print(f"   📝 Keywords: {[kw for kw, _ in filtered_tokens]}")
+            logger.info(f"   📝 Keywords: {[kw for kw, _ in filtered_tokens]}")
         
-        print(f"🛡️  Exemptions: {exempted_count} IPs protected from blocking")
-        print(f"🚫 404 Blocking: {blocked_404_count} IPs blocked for excessive 404s")
+        logger.info(f"🛡️  Exemptions: {exempted_count} IPs protected from blocking")
+        logger.info(f"🚫 404 Blocking: {blocked_404_count} IPs blocked for excessive 404s")
         
         if disable_ai:
-            print("✅ Keyword-based protection now active with context-aware filtering!")
+            logger.info("✅ Keyword-based protection now active with context-aware filtering!")
         else:
-            print("✅ Enhanced AI protection now active with context-aware filtering!")
-        print("="*60)
+            logger.info("✅ Enhanced AI protection now active with context-aware filtering!")
+        logger.info("="*60)
 
         try:
             _print_geoip_blocklist_summary()
@@ -820,7 +823,7 @@ def _print_geoip_summary(ips, title):
         return
     db_path = _get_geoip_db_path()
     if not db_path or not os.path.exists(db_path):
-        print("GeoIP summary skipped: AIWAF_GEOIP_DB_PATH not set or file missing.")
+        logger.info("GeoIP summary skipped: AIWAF_GEOIP_DB_PATH not set or file missing.")
         return
 
     counts = Counter()
@@ -836,11 +839,11 @@ def _print_geoip_summary(ips, title):
         return
 
     top = counts.most_common(10)
-    print(title)
+    logger.info(title)
     for code, cnt in top:
-        print(f"  - {code}: {cnt}")
+        logger.info(f"  - {code}: {cnt}")
     if unknown:
-        print(f"  - UNKNOWN: {unknown}")
+        logger.info(f"  - UNKNOWN: {unknown}")
 
 
 def _get_blocked_ips():

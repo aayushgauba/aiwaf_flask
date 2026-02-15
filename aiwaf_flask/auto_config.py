@@ -9,8 +9,11 @@ import os
 import sys
 import importlib
 import inspect
+import logging
 from pathlib import Path
 from typing import Optional, Tuple, Dict, Any
+
+logger = logging.getLogger(__name__)
 
 
 class AIWAFAutoConfig:
@@ -68,7 +71,7 @@ class AIWAFAutoConfig:
                     return True
                     
         except Exception as e:
-            print(f"🔍 Flask app detection failed: {e}")
+            logger.info(f"🔍 Flask app detection failed: {e}")
             
         return False
     
@@ -599,22 +602,22 @@ def print_auto_config_info(config_info: Dict[str, Any]) -> None:
     }
     
     description = method_descriptions.get(method, 'Unknown detection method')
-    print(f"📁 Auto-configured data directory: {data_dir}")
-    print(f"🔍 Detection method: {description}")
+    logger.info(f"📁 Auto-configured data directory: {data_dir}")
+    logger.info(f"🔍 Detection method: {description}")
     
     # Additional details based on method
     details = config_info.get('details', {})
     if method == 'flask_app_config' and 'source_file' in details:
-        print(f"📄 Source: {details['source_file']}")
+        logger.info(f"📄 Source: {details['source_file']}")
     elif method == 'project_structure_detection' and 'project_root' in details:
-        print(f"📂 Project root: {details['project_root']}")
+        logger.info(f"📂 Project root: {details['project_root']}")
     elif method == 'existing_directory_search' and 'found_at' in details:
-        print(f"📍 Found at: {details['found_at']}")
+        logger.info(f"📍 Found at: {details['found_at']}")
     elif method == 'best_existing_directory':
-        print(f"📍 Selected from {details.get('total_candidates', 0)} candidates")
-        print(f"📊 Data score: {details.get('data_score', 0)}")
+        logger.info(f"📍 Selected from {details.get('total_candidates', 0)} candidates")
+        logger.info(f"📊 Data score: {details.get('data_score', 0)}")
     elif method == 'package_based_location' and 'package_path' in details:
-        print(f"📦 Package location: {details['package_path']}")
+        logger.info(f"📦 Package location: {details['package_path']}")
     elif method in ['user_data_directory', 'temp_user_directory'] and 'location' in details:
-        print(f"📂 Created at: {details['location']}")
-        print(f"💡 This location is consistent regardless of working directory")
+        logger.info(f"📂 Created at: {details['location']}")
+        logger.info(f"💡 This location is consistent regardless of working directory")

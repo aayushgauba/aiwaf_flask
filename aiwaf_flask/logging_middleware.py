@@ -7,11 +7,14 @@ Creates standard web server access logs with AIWAF security annotations.
 
 import csv
 import os
+import logging
 from datetime import datetime
 from pathlib import Path
 from flask import request, g
 from .exemption_decorators import should_apply_middleware
 import time
+
+logger = logging.getLogger(__name__)
 
 
 class AIWAFLoggingMiddleware:
@@ -71,7 +74,7 @@ class AIWAFLoggingMiddleware:
                 
         except Exception as e:
             # Don't let logging errors break the application
-            print(f"AIWAF Logging Error: {e}")
+            logger.exception(f"AIWAF Logging Error: {e}")
         
         return response
     
